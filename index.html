@@ -1,0 +1,2692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CodeLab IDE</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358a6ff' stroke-width='2'><polyline points='16 18 22 12 16 6'/><polyline points='8 6 2 12 8 18'/></svg>">
+
+<!-- Monaco Editor -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/editor/editor.main.min.css">
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.min.js"></script>
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #1e1e1e; --surface: #252526; --surface-2: #333333;
+    --border: #444444; --text: #cccccc; --text-dim: #858585;
+    --accent: #007acc; --accent-hover: #0062a3; --success: #89d185;
+    --danger: #f85149; --warning: #d29922; --purple: #a371f7;
+    --tab-active: #1e1e1e; --tab-inactive: #2d2d2d;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--text);
+    height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+    user-select: none;
+  }
+
+  /* MENU BAR */
+  .menubar {
+    height: 35px; background: var(--surface); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 10px; gap: 15px; flex-shrink: 0;
+    font-size: 13px; z-index: 50;
+  }
+  .menubar-logo { font-weight: bold; color: var(--accent); display: flex; align-items: center; gap: 6px; }
+  .menubar-item { cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+  .menubar-item:hover { background: var(--surface-2); }
+
+  /* MAIN LAYOUT */
+  .main-container { flex: 1; display: flex; min-height: 0; }
+
+  /* ACTIVITY BAR */
+  .activity-bar {
+    width: 48px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center; padding-top: 10px; gap: 5px; flex-shrink: 0;
+  }
+  .activity-icon {
+    width: 48px; height: 48px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; color: var(--text-dim); transition: 0.1s; border-left: 2px solid transparent;
+  }
+  .activity-icon:hover { color: white; }
+  .activity-icon.active { color: white; border-left: 2px solid var(--accent); background: rgba(255,255,255,0.05); }
+
+  /* SIDEBAR PANELS */
+  .sidebar {
+    width: 240px; background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 10px 15px; font-size: 11px; font-weight: bold; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--text-dim); display: flex; justify-content: space-between; align-items: center;
+  }
+  
+  /* Explorer View */
+  .file-tree { flex: 1; overflow-y: auto; padding: 5px 0; }
+  .file-item {
+    padding: 5px 15px 5px 30px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+  }
+  .file-item:hover { background: var(--surface-2); }
+  .file-item.active { background: var(--surface-2); color: white; border-left: 2px solid var(--accent); padding-left: 28px; }
+
+  /* SCROLL FIX: flex children must allow shrinking or overflow-y never kicks in */
+  .ext-list, .file-tree, .ai-chat, .integ-body, .feed-body, .store-body,
+  .console-output, .extensions-view, .watch-side, .cmd-list { min-height: 0; }
+  #view-explorer, #view-extensions, #view-ai, #view-integrations { min-height: 0; }
+
+  /* EXTENSIONS VIEW */
+  .extensions-view { display: none; flex: 1; flex-direction: column; }
+  .ext-search { margin: 0 10px 10px 10px; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); color: white; border-radius: 4px; font-size: 12px; outline: none; }
+  .ext-search:focus { border-color: var(--accent); }
+  .ext-list { flex: 1; overflow-y: auto; }
+  .ext-item { padding: 10px 15px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
+  .ext-icon { width: 32px; height: 32px; background: var(--surface-2); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .ext-info { flex: 1; }
+  .ext-name { font-size: 13px; font-weight: bold; color: white; margin-bottom: 2px; }
+  .ext-desc { font-size: 11px; color: var(--text-dim); line-height: 1.3; margin-bottom: 6px; }
+  .ext-btn { background: var(--accent); color: white; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; }
+  .ext-btn:hover { background: var(--accent-hover); }
+  .ext-btn.installed { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); cursor: default; }
+
+  /* RESIZERS */
+  .resizer-h { width: 4px; background: var(--border); cursor: col-resize; transition: background 0.1s; z-index: 10; flex-shrink: 0; }
+  .resizer-h:hover { background: var(--accent); }
+  .resizer-v { width: 4px; background: var(--border); cursor: col-resize; transition: background 0.1s; z-index: 10; flex-shrink: 0; }
+  .resizer-v:hover { background: var(--accent); }
+
+  /* EDITOR & PREVIEW AREA */
+  .editor-wrapper { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  
+  .tabs {
+    height: 35px; background: var(--surface); display: flex; overflow-x: auto; flex-shrink: 0;
+  }
+  .tab {
+    padding: 0 15px; font-size: 13px; display: flex; align-items: center; gap: 8px;
+    background: var(--tab-inactive); color: var(--text-dim); cursor: pointer; border-right: 1px solid var(--border);
+    min-width: 120px;
+  }
+  .tab.active { background: var(--tab-active); color: white; border-top: 1px solid var(--accent); }
+  .tab .close { font-size: 16px; opacity: 0.5; margin-left: auto; }
+  .tab .close:hover { opacity: 1; }
+
+  .editor-split { flex: 1; display: flex; flex-direction: row; min-height: 0; }
+  
+  .code-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--bg); position: relative; }
+  #monacoContainer { flex: 1; min-height: 0; }
+  
+  .preview-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; background: white; position: relative; }
+  .preview-header { height: 32px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; padding: 0 10px; font-size: 12px; color: var(--text); z-index: 5; }
+  iframe { flex: 1; border: none; width: 100%; height: 100%; }
+  
+  /* CONSOLE */
+  .console-pane {
+    height: 150px; background: var(--bg); border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .console-output { padding: 10px; font-family: 'Consolas', monospace; font-size: 12px; overflow-y: auto; flex: 1; color: #0f0; }
+  .console-line.error { color: var(--danger); }
+  .console-line.warn { color: var(--warning); }
+
+  /* SCRATCH-STYLE TUTORIAL WINDOW */
+  .tutorial-window {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    width: 360px;
+    background: #2d2d2d;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 100;
+    border: 1px solid var(--border);
+  }
+  .tut-header {
+    background: #4c97ff;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    cursor: grab;
+  }
+  .tut-header:active { cursor: grabbing; }
+  .tut-title { display: flex; align-items: center; gap: 8px; }
+  .tut-controls { display: flex; gap: 10px; }
+  .tut-btn { background: transparent; border: none; color: white; cursor: pointer; font-size: 14px; }
+  .tut-btn:hover { opacity: 0.8; }
+  
+  .tut-video-box { width: 100%; aspect-ratio: 16/9; background: #000; }
+  .tut-video-box iframe { width: 100%; height: 100%; border: none; }
+  
+  .tut-footer {
+    padding: 10px;
+    background: var(--surface);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+  }
+  .tut-dots { display: flex; gap: 5px; }
+  .tut-dot { width: 8px; height: 8px; border-radius: 50%; background: #555; }
+  .tut-dot.active { background: white; }
+  .tut-next {
+    background: #4c97ff; border: none; padding: 6px 16px; border-radius: 20px;
+    color: white; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 5px;
+  }
+  .tut-next:hover { background: #3d7ecc; }
+
+  /* STATUS BAR */
+  .status-bar {
+    height: 22px; background: var(--accent); color: white; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 10px; font-size: 11.5px; flex-shrink: 0;
+    z-index: 50;
+  }
+  .status-left, .status-right { display: flex; gap: 15px; align-items: center; }
+  .status-item { cursor: pointer; }
+  .status-item:hover { background: rgba(255,255,255,0.2); }
+
+  /* ===== BASE BUTTON (used everywhere) ===== */
+  .btn { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); padding: 5px 12px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: #fff; }
+  .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-accent:hover { background: var(--accent-hover); }
+
+  /* ===== AI ASSISTANT PANEL ===== */
+  .ai-chat { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .ai-msg { padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.45; max-width: 92%; word-wrap: break-word; white-space: pre-wrap; user-select: text; }
+  .ai-bot { background: var(--surface-2); align-self: flex-start; }
+  .ai-user { background: var(--accent); color: #fff; align-self: flex-end; }
+  .ai-err { background: rgba(248,81,73,.15); border: 1px solid var(--danger); color: #ffb3ad; align-self: flex-start; }
+  .ai-quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); }
+  .ai-chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); font-size: 11px; padding: 4px 9px; border-radius: 12px; cursor: pointer; }
+  .ai-chip:hover { border-color: var(--accent); color: #fff; }
+  .ai-input-row { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--border); }
+  .ai-input-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: #fff; border-radius: 4px; padding: 6px 8px; font-size: 12px; outline: none; min-width: 0; }
+  .ai-input-row input:focus { border-color: var(--purple); }
+  .ai-input-row button { background: var(--purple); color: #fff; border: none; border-radius: 4px; width: 30px; cursor: pointer; flex-shrink: 0; }
+  .ai-files { font-size: 10px; color: var(--text-dim); padding: 5px 10px; border-bottom: 1px solid var(--border); line-height: 1.4; }
+  .ai-files b { color: #89d185; }
+  .ai-edited { color: #89d185; font-size: 10px; margin-top: 6px; font-weight: bold; }
+  .ai-insert { margin-top: 6px; background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 10px; padding: 2px 8px; border-radius: 4px; cursor: pointer; display: block; }
+  .ai-insert:hover { border-color: var(--purple); color: #fff; }
+
+  /* ===== CLOUD CONSOLE ===== */
+  .cloud-tabs { display: flex; gap: 4px; padding: 8px 16px; background: #111827; border-bottom: 1px solid #273449; }
+  .cloud-tab { padding: 6px 16px; color: #9ca3af; cursor: pointer; border-radius: 6px; font-size: 13px; }
+  .cloud-tab:hover { color: #fff; }
+  .cloud-tab.active { background: #1f2937; color: #fff; }
+  .cloud-body { flex: 1; overflow-y: auto; padding: 16px 20px 40px; min-height: 0; }
+  .cfg-card { background: #16202d; border: 1px solid #2a475e; border-radius: 8px; padding: 12px; margin-bottom: 12px; max-width: 980px; }
+  .cfg-card h4 { color: #fff; font-size: 14px; margin-bottom: 4px; }
+  .cfg-card p { font-size: 11px; color: #8f98a0; margin-bottom: 8px; line-height: 1.4; }
+  .cfg-card input { width: 100%; padding: 7px 10px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; border-radius: 5px; font-size: 12px; outline: none; margin-bottom: 6px; }
+  .cfg-card input:focus { border-color: #66c0f4; }
+  .btn-c { background: #2a475e; color: #66c0f4; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+  .btn-c:hover { background: #3b5a7d; color: #fff; }
+  .mini-btn { background: #334155; border: none; color: #cbd5e1; font-size: 10px; padding: 3px 8px; border-radius: 4px; cursor: pointer; }
+  .mini-btn:hover { background: #475569; color: #fff; }
+  .sb-grid { width: 100%; border-collapse: collapse; font-size: 12px; background: #0f172a; }
+  .sb-grid th { background: #1e293b; color: #93c5fd; text-align: left; padding: 7px 10px; white-space: nowrap; }
+  .sb-grid td { padding: 6px 10px; border-top: 1px solid #1e293b; color: #e2e8f0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .sb-grid tbody tr:hover td { background: #16202d; }
+  .tree-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; cursor: pointer; color: #e2e8f0; font-family: Consolas, monospace; font-size: 12px; }
+  .tree-row:hover { background: #1e293b; }
+  .tree-act { margin-left: auto; display: flex; gap: 4px; opacity: 0; }
+  .tree-row:hover .tree-act { opacity: 1; }
+  .crumb { color: #93c5fd; font-size: 12px; margin-bottom: 10px; font-family: Consolas, monospace; }
+  .crumb span { cursor: pointer; }
+  .crumb span:hover { color: #fff; }
+  .crumb b { color: #fff; }
+  .field-json { width: 100%; min-height: 180px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; font-family: Consolas, monospace; font-size: 12px; padding: 8px; border-radius: 6px; outline: none; resize: vertical; }
+  .embed-frame { width: 100%; height: calc(100vh - 200px); border: 0; border-radius: 8px; background: #fff; }
+
+  /* AI provider select screen */
+  .ai-prov-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; padding: 8px 10px 4px; }
+  .ai-prov { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 4px; cursor: pointer; text-align: center; font-size: 11px; color: var(--text); }
+  .ai-prov:hover { border-color: var(--accent); }
+  .ai-prov.active { border-color: var(--purple); background: rgba(163,113,247,.12); color: #fff; }
+  .ai-prov b { display: block; font-size: 11px; color: #fff; margin-bottom: 2px; }
+  .ai-prov .free { color: #89d185; font-size: 9px; }
+
+  /* ===== INTEGRATIONS PANEL ===== */
+  .integ-body { flex: 1; overflow-y: auto; padding: 10px; }
+  .integ-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+  .integ-card h4 { color: #fff; font-size: 12px; margin-bottom: 4px; }
+  .integ-card p { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; line-height: 1.35; }
+  .integ-card input { width: 100%; padding: 6px 8px; background: var(--bg); border: 1px solid var(--border); color: #fff; border-radius: 4px; font-size: 11px; outline: none; margin-bottom: 6px; }
+  .integ-card input:focus { border-color: var(--accent); }
+  .integ-row { display: flex; gap: 6px; }
+  .integ-row .ext-btn { flex: 1; }
+
+  /* ===== EXTENSION CATEGORIES ===== */
+  .ext-cat { display: inline-block; font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-dim); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; margin-bottom: 4px; }
+
+  /* ===== SCRATCH MODE THEME ===== */
+  body.scratch-mode { --accent: #4c97ff; --accent-hover: #3d7ecc; --purple: #cf63d9; --warning: #ffab19; }
+  body.scratch-mode .activity-icon.active { border-left-color: #ffab19; }
+  body.scratch-mode .status-bar { background: #4c97ff; }
+
+  /* ===== XP / LEVEL PILL (Steam-style progression) ===== */
+  .xp-pill { margin-left: auto; display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--surface-2); padding: 3px 12px; border-radius: 20px; border: 1px solid var(--border); }
+  .xp-pill:hover { filter: brightness(1.3); }
+  .xp-lvl { font-weight: bold; color: var(--purple); font-size: 12px; }
+  .xp-bar { width: 70px; height: 6px; background: #111; border-radius: 3px; overflow: hidden; }
+  .xp-bar > div { height: 100%; background: linear-gradient(90deg, #58a6ff, #a371f7); transition: width .4s; }
+  .xp-bar.big { width: 100%; height: 10px; margin-top: 12px; }
+  .xp-count { color: var(--text-dim); font-size: 11px; }
+
+  /* ===== FULL PAGE OVERLAYS (Feed & Store) ===== */
+  .page-overlay { position: fixed; inset: 35px 0 22px 0; z-index: 500; display: none; flex-direction: column; overflow: hidden; }
+  .page-topbar { display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: #0f0f0f; border-bottom: 1px solid #272727; }
+  .page-logo { color: #fff; font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .feed-logo { color: #ff4c4c; }
+  .page-search { flex: 1; max-width: 480px; margin: 0 auto; background: #121212; border: 1px solid #303030; color: #fff; padding: 7px 14px; border-radius: 20px; font-size: 13px; outline: none; }
+  .page-search:focus { border-color: #3ea6ff; }
+  .page-close { margin-left: auto; background: rgba(255,255,255,.1); border: none; color: #fff; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px; flex-shrink: 0; }
+  .page-close:hover { background: rgba(255,255,255,.25); }
+
+  /* ===== CODETUBE FEED ===== */
+  .feed-body { flex: 1; overflow-y: auto; padding: 16px 24px 40px; }
+  .feed-hero { display: flex; gap: 20px; background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid #303050; border-radius: 14px; padding: 18px; margin-bottom: 8px; cursor: pointer; align-items: center; }
+  .feed-hero:hover { border-color: #4c5a8a; }
+  .feed-hero-thumb { width: 300px; max-width: 36vw; aspect-ratio: 16/9; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 70px; flex-shrink: 0; }
+  .feed-hero-tag { color: #ff9d4c; font-size: 12px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; }
+  .feed-hero-title { color: #fff; font-size: 24px; font-weight: bold; margin: 4px 0; }
+  .feed-hero-desc { color: #aaa; font-size: 13px; margin-bottom: 14px; max-width: 480px; line-height: 1.4; }
+  .feed-chips { display: flex; gap: 8px; margin: 14px 0; flex-wrap: wrap; }
+  .feed-chip { background: #272727; color: #fff; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; border: 1px solid transparent; }
+  .feed-chip:hover { background: #3f3f3f; }
+  .feed-chip.active { background: #f1f1f1; color: #0f0f0f; font-weight: bold; }
+  .feed-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px 14px; }
+  .feed-card { cursor: pointer; }
+  .feed-thumb { position: relative; aspect-ratio: 16/9; border-radius: 10px; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 56px; transition: border-radius .15s; }
+  .feed-card:hover .feed-thumb { border-radius: 0; }
+  .feed-dur { position: absolute; bottom: 6px; right: 6px; background: rgba(0,0,0,.8); color: #fff; font-size: 11px; padding: 2px 6px; border-radius: 4px; z-index: 2; }
+
+  /* LIVE THUMBNAILS: real iframe previews of each project */
+  .live-embed { position: absolute; inset: 0; opacity: 0; transition: opacity .5s; overflow: hidden; z-index: 1; }
+  .live-embed.loaded { opacity: 1; }
+  .live-embed iframe { width: 800px; height: 450px; border: 0; transform-origin: 0 0; pointer-events: none; background: #fff; }
+  .feed-emoji, .store-emoji { transition: opacity .3s; }
+  .feed-thumb.small { font-size: 26px; width: 130px; min-width: 130px; height: 74px; border-radius: 6px; flex-shrink: 0; }
+  .feed-meta { display: flex; gap: 10px; margin-top: 10px; }
+  .feed-avatar { width: 36px; height: 36px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 15px; flex-shrink: 0; }
+  .feed-avatar.big { width: 44px; height: 44px; }
+  .feed-title { color: #fff; font-size: 14px; font-weight: 600; line-height: 1.3; }
+  .feed-sub { color: #aaa; font-size: 12px; margin-top: 2px; }
+  .feed-empty { color: #888; text-align: center; padding: 40px; font-size: 14px; }
+
+  /* ===== WATCH PAGE ===== */
+  .watch-top { padding: 10px 24px 0; }
+  .watch-wrap { display: grid; grid-template-columns: 1fr 320px; gap: 20px; padding: 10px 24px 30px; }
+  .watch-main { min-width: 0; }
+  .watch-player { aspect-ratio: 16/9; background: #000; border-radius: 12px; overflow: hidden; }
+  .watch-player iframe { width: 100%; height: 100%; border: none; }
+  .watch-title { color: #fff; font-size: 20px; font-weight: bold; margin: 14px 0 10px; }
+  .watch-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .watch-creator { display: flex; flex-direction: column; margin-right: 8px; }
+  .watch-creator b { color: #fff; font-size: 14px; }
+  .watch-creator span { color: #aaa; font-size: 12px; }
+  .btn-liked { border-color: #f85149 !important; color: #f85149 !important; }
+  .watch-desc { background: #272727; border-radius: 10px; padding: 12px; color: #ddd; font-size: 13px; margin-top: 14px; line-height: 1.5; }
+  .watch-comments { margin-top: 18px; }
+  .watch-comments h4 { color: #fff; margin-bottom: 12px; }
+  .comment-row { display: flex; gap: 10px; margin-bottom: 12px; color: #ddd; font-size: 13px; align-items: flex-start; }
+  .comment-row input { flex: 1; background: transparent; border: none; border-bottom: 1px solid #444; color: #fff; padding: 6px 2px; outline: none; font-size: 13px; }
+  .comment-row input:focus { border-bottom-color: #3ea6ff; }
+  .watch-side h4 { color: #fff; margin: 10px 0; }
+  .watch-rel { display: flex; gap: 8px; margin-bottom: 10px; cursor: pointer; }
+  .watch-rel:hover .feed-title { color: #3ea6ff; }
+
+  /* ===== STORE (Steam-style) ===== */
+  .store-nav { display: flex; align-items: center; gap: 24px; padding: 10px 20px; background: linear-gradient(90deg, #1b2838, #171a21); border-bottom: 1px solid #2a475e; }
+  .store-logo { color: #fff; font-weight: bold; font-size: 15px; }
+  .store-tabs { display: flex; gap: 4px; }
+  .store-tab { padding: 8px 18px; color: #8f98a0; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; border-radius: 4px; }
+  .store-tab:hover { color: #fff; }
+  .store-tab.active { background: rgba(103,193,245,.2); color: #fff; }
+  .store-body { flex: 1; overflow-y: auto; padding-bottom: 40px; background: radial-gradient(ellipse at top, #1b2838, #0f1115 65%); }
+  .store-carousel { position: relative; height: 320px; margin: 20px; border-radius: 10px; overflow: hidden; max-width: 1100px; }
+  .car-card { position: absolute; inset: 0; display: flex; align-items: flex-end; opacity: 0; transition: opacity .5s; cursor: pointer; pointer-events: none; }
+  .car-card.on { opacity: 1; pointer-events: auto; }
+  .car-emoji { position: absolute; right: 70px; top: 30px; font-size: 140px; filter: drop-shadow(0 10px 30px rgba(0,0,0,.5)); }
+  .car-info { background: linear-gradient(transparent, rgba(0,0,0,.85)); padding: 26px 30px; width: 100%; }
+  .car-title { font-size: 28px; font-weight: bold; color: #fff; }
+  .car-desc { color: #c7d5e3; font-size: 14px; margin: 6px 0 10px; max-width: 520px; }
+  .car-price { display: inline-block; background: #4c6b22; color: #beee62; padding: 3px 12px; border-radius: 3px; font-weight: bold; font-size: 12px; }
+  .car-arrow { position: absolute; top: 50%; transform: translateY(-50%); z-index: 5; background: rgba(0,0,0,.5); color: #fff; border: none; font-size: 28px; width: 44px; height: 60px; cursor: pointer; }
+  .car-arrow:hover { background: rgba(0,0,0,.8); }
+  .car-arrow.left { left: 0; }
+  .car-arrow.right { right: 0; }
+  .car-dots { position: absolute; bottom: 10px; right: 20px; z-index: 5; display: flex; gap: 6px; }
+  .car-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.3); cursor: pointer; }
+  .car-dot.on { background: #fff; }
+  .store-section { padding: 0 20px 10px; max-width: 1200px; }
+  .store-section h3 { color: #fff; margin: 14px 0 10px; font-size: 15px; }
+  .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  .store-card { background: #16202d; border-radius: 6px; overflow: hidden; cursor: pointer; transition: transform .15s, box-shadow .15s; }
+  .store-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.5); }
+  .store-thumb { position: relative; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; font-size: 44px; }
+  .wish { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,.5); border: none; border-radius: 50%; width: 30px; height: 30px; cursor: pointer; font-size: 14px; }
+  .wish:hover { background: rgba(0,0,0,.8); }
+  .store-card-info { padding: 8px 10px; }
+  .store-card-title { color: #fff; font-size: 13px; font-weight: bold; margin-bottom: 6px; }
+  .store-tags span { display: inline-block; background: #2a475e; color: #66c0f4; font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-right: 4px; }
+  .store-card-foot { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; }
+  .store-price { color: #beee62; font-weight: bold; }
+  .store-rating { color: #ffd700; }
+
+  /* ===== ACHIEVEMENTS ===== */
+  .ach-hero { background: #1b2838; border: 1px solid #2a475e; border-radius: 10px; padding: 20px; margin: 20px; color: #fff; max-width: 1200px; }
+  .ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; padding: 0 20px 40px; max-width: 1200px; }
+  .ach-card { display: flex; gap: 12px; background: #16202d; border: 1px solid #2a475e; border-radius: 8px; padding: 14px; opacity: .55; filter: grayscale(1); }
+  .ach-card.unlocked { opacity: 1; filter: none; border-color: #4c6b22; background: linear-gradient(135deg, #16202d, #1d2f1a); }
+  .ach-icon { font-size: 32px; }
+  .ach-name { color: #fff; font-weight: bold; font-size: 14px; }
+  .ach-desc { color: #8f98a0; font-size: 12px; margin: 2px 0; }
+  .ach-xp { color: #beee62; font-size: 11px; font-weight: bold; }
+
+  /* ===== COMMAND PALETTE ===== */
+  .cmd-overlay { position: fixed; top: 0; left: 50%; transform: translateX(-50%); margin-top: 45px; z-index: 9998; display: none; width: 520px; max-width: 92vw; }
+  .cmd-palette { background: #252526; border: 1px solid #454545; border-radius: 6px; box-shadow: 0 8px 30px rgba(0,0,0,.6); overflow: hidden; }
+  .cmd-palette input { width: 100%; padding: 10px 14px; background: #1e1e1e; border: none; border-bottom: 1px solid #454545; color: #fff; font-size: 13px; outline: none; }
+  .cmd-list { max-height: 320px; overflow-y: auto; }
+  .cmd-item { padding: 8px 14px; display: flex; justify-content: space-between; align-items: center; font-size: 13px; cursor: pointer; color: #fff; }
+  .cmd-item b { font-weight: normal; }
+  .cmd-item span { color: var(--text-dim); font-size: 11px; }
+  .cmd-item.sel, .cmd-item:hover { background: #04395e; }
+
+  /* CUSTOM ALERTS & MODALS */
+  .custom-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center; z-index: 9999;
+  }
+  .custom-modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 20px; width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .custom-modal h3 { font-size: 16px; color: white; margin-bottom: 12px; }
+  .custom-modal p { font-size: 13px; color: var(--text-dim); margin-bottom: 20px; line-height: 1.4; }
+  .custom-modal input {
+    width: 100%; padding: 8px; background: var(--bg); border: 1px solid var(--border);
+    color: white; border-radius: 4px; margin-bottom: 20px; outline: none;
+  }
+  .custom-modal input:focus { border-color: var(--accent); }
+  .custom-modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  
+  /* TOAST */
+  .toast-container { position: fixed; bottom: 40px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px; }
+  .toast {
+    background: var(--surface); border-left: 4px solid var(--accent); color: white;
+    padding: 12px 20px; border-radius: 4px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: slideIn 0.3s ease-out; display: flex; align-items: center; gap: 10px;
+  }
+  .toast.success { border-left-color: var(--success); }
+  .toast.error { border-left-color: var(--danger); }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<!-- TOP MENU -->
+<div class="menubar">
+  <div class="menubar-logo">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+    CodeLab IDE
+  </div>
+  <div class="xp-pill" id="xpPill" onclick="social.openProfile()"></div>
+  <div class="menubar-item" onclick="app.newProject()">New Project</div>
+  <div class="menubar-item" onclick="app.saveProject()">Save Workspace</div>
+  <div class="menubar-item" onclick="app.publishToSupabase()" style="color:var(--success); font-weight:bold;">Publish to Supabase</div>
+  <div class="menubar-item" onclick="app.runCode()">▶ Run (Ctrl+S)</div>
+  <div style="flex:1"></div>
+  <div id="authSlot" style="display:flex;align-items:center;"></div>
+  <button id="pixlect-login" class="menubar-item" style="background:var(--purple);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:999px;padding:4px 14px;font-weight:bold;cursor:pointer;">🔐 Sign in with PIXLECT</button>
+</div>
+
+<!-- CHOOSE YOUR LANGUAGE — first-run modal -->
+<div class="page-overlay" id="langPickOverlay" style="z-index:20000; display:none; align-items:center; justify-content:center;">
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:28px; max-width:640px; width:92%; text-align:center;">
+    <h2 style="color:#fff; margin-bottom:6px;">Choose your Language</h2>
+    <p style="color:var(--text-dim); font-size:13px; margin-bottom:20px;">Pick the language you want to start with — you can install more anytime from the Extensions marketplace.</p>
+    <div id="langPickGrid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px;"></div>
+    <button class="btn" style="margin-top:20px; padding:6px 18px;" onclick="app.closeLangPicker()">Skip</button>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<div class="main-container">
+  
+  <!-- ACTIVITY BAR -->
+  <div class="activity-bar">
+    <div class="activity-icon active" id="icon-explorer" title="Explorer" onclick="app.switchSidebar('explorer')">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+    </div>
+    <div class="activity-icon" title="Community Feed (CodeTube)" onclick="social.openFeed()">
+      <svg width="24" height="24" fill="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4"></rect><polygon points="10,9 16,12 10,15" fill="#252526"></polygon></svg>
+    </div>
+    <div class="activity-icon" title="Project Store" onclick="social.openStore()">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="13" rx="2"></rect><path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path><path d="M2 12h20"></path><path d="M7 12v8M12 12v8M17 12v8"></path></svg>
+    </div>
+    <div class="activity-icon" title="Search">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </div>
+    <div class="activity-icon" title="Source Control">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M6 9v12"></path><path d="M18 9a9 9 0 0 1-9 9"></path></svg>
+    </div>
+    
+    <div class="activity-icon" id="icon-extensions" title="Languages & Extensions" onclick="app.switchSidebar('extensions')">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 4h6v6H4z"></path><path d="M14 4h6v6h-6z"></path><path d="M4 14h6v6H4z"></path><path d="M14 14h6v6h-6z"></path><path d="M10 7h4M7 10v4M17 10v4M10 17h4"></path></svg>
+    </div>
+    <div class="activity-icon" id="icon-ai" title="AI Assistant (bring your own API key)" style="display:none" onclick="app.switchSidebar('ai')">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"></path><path d="M19 17l.9 2.1L22 20l-2.1.9L19 23l-.9-2.1L16 20l2.1-.9z"></path></svg>
+    </div>
+    <div class="activity-icon" id="icon-integrations" title="Cloud Integrations (Supabase / Firebase)" style="display:none" onclick="app.switchSidebar('integrations')">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 7V3M15 7V3"></path><path d="M7 7h10v4a5 5 0 0 1-10 0V7z"></path><path d="M12 16v5"></path></svg>
+    </div>
+    
+    <div style="flex:1"></div>
+    <div class="activity-icon" title="Achievements & Profile" onclick="social.openProfile()">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z"></path><path d="M7 6H4a2 2 0 0 0 2 4M17 6h3a2 2 0 0 1-2 4"></path></svg>
+    </div>
+    <div class="activity-icon" title="Settings">
+      <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </div>
+  </div>
+
+  <!-- SIDEBAR CONTAINER -->
+  <div class="sidebar" id="sidebar">
+    
+    <!-- EXPLORER VIEW -->
+    <div id="view-explorer" style="display:flex; flex-direction:column; height:100%;">
+      <div class="sidebar-header">Explorer <span style="cursor:pointer" onclick="app.promptAddFile()">+</span></div>
+      <div class="file-tree" id="fileTree"></div>
+    </div>
+
+    <!-- EXTENSIONS VIEW -->
+    <div id="view-extensions" class="extensions-view">
+      <div class="sidebar-header">Extensions: Marketplace</div>
+      <input type="text" class="ext-search" placeholder="Search Extensions in Marketplace" oninput="app.extFilter=this.value;app.renderExtensions()">
+      <div class="ext-list" id="extList">
+        <!-- Populated via JS -->
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT VIEW -->
+    <div id="view-ai" style="display:none; flex-direction:column; height:100%;">
+      <div class="sidebar-header">AI Assistant <span style="cursor:pointer" title="Settings" onclick="app.toggleAISettings()">⚙</span></div>
+      <div class="ai-files" id="aiFilesBar"></div>
+      <div id="aiSettings" style="display:none; padding:0 0 4px 0; border-bottom:1px solid var(--border);">
+        <!-- Provider select screen — rendered by app.renderAISettings() -->
+      </div>
+      <div class="ai-chat" id="aiChat">
+        <div class="ai-msg ai-bot">👋 Hi! I already work in ⚡ Easy mode — free cloud AI, no account or key needed. Just type below!
+
+Want a specific model? Open ⚙ — Gemini, OpenRouter and Groq all have free tiers. Your keys stay in your browser.</div>
+      </div>
+      <div class="ai-quick">
+        <button class="ai-chip" style="border-color:var(--purple);color:#fff;font-weight:bold" onclick="app.quickFix()">⚡ Quick Fix</button>
+        <button class="ai-chip" onclick="app.aiSend('Explain what this code does, briefly.')">🧠 Explain</button>
+        <button class="ai-chip" onclick="app.aiSend('Add helpful comments to this code and return the full code.')">💬 Comment</button>
+        <button class="ai-chip" onclick="app.aiSend('Find and fix bugs in this code. Return the corrected full code.')">🐛 Fix bugs</button>
+        <button class="ai-chip" onclick="app.aiSend('Suggest 3 improvements for this code, with short code examples.')">🚀 Improve</button>
+        <button class="ai-chip" id="autoEditChip" onclick="app.toggleAutoEdit()">🤖 Auto-edit: ON</button>
+      </div>
+      <div class="ai-input-row">
+        <input id="aiInput" placeholder="Ask AI..." onkeydown="if(event.key==='Enter')app.aiSend()">
+        <button onclick="app.aiSend()">➤</button>
+      </div>
+    </div>
+
+    <!-- INTEGRATIONS VIEW -->
+    <div id="view-integrations" style="display:none; flex-direction:column; height:100%;">
+      <div class="sidebar-header">Cloud Integrations</div>
+      <div class="integ-body" id="integBody"></div>
+    </div>
+
+  </div>
+
+  <div class="resizer-h" onmousedown="app.startResize('h', event)"></div>
+
+  <!-- EDITOR & PREVIEW -->
+  <div class="editor-wrapper">
+    
+    <!-- TABS -->
+    <div class="tabs" id="fileTabs"></div>
+    
+    <div class="editor-split" id="editorSplit">
+      <!-- Code Area -->
+      <div class="code-pane" id="codePane">
+        <div id="monacoContainer"></div>
+      </div>
+      
+      <div class="resizer-v" onmousedown="app.startResize('v', event)"></div>
+      
+      <!-- Preview Area -->
+      <div class="preview-pane" id="previewPane">
+        <div class="preview-header">
+          <span>Browser Preview</span>
+          <button class="btn" style="padding:2px 8px; font-size:11px;" onclick="app.runCode()">↻ Refresh</button>
+        </div>
+        <iframe id="previewFrame" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+        
+        <!-- SCRATCH TUTORIAL POPUP -->
+        <div class="tutorial-window" id="scratchTut" style="display:none;">
+          <div class="tut-header" id="tutHeader">
+            <div class="tut-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              Tutorials
+            </div>
+            <div class="tut-controls">
+              <button class="tut-btn" onclick="document.getElementById('scratchTut').style.display='none'">✖</button>
+            </div>
+          </div>
+          <div class="tut-video-box">
+            <iframe id="tutVideo" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+          </div>
+          <div class="tut-footer">
+            <div class="tut-dots" id="tutDots"></div>
+            <button class="tut-next" onclick="app.nextTutorial()">
+              Next Step <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    
+    <!-- TERMINAL / CONSOLE -->
+    <div class="console-pane" id="consolePane">
+      <div class="sidebar-header" style="border-bottom:1px solid var(--border); border-top:1px solid var(--border)">Terminal / Output</div>
+      <div class="console-output" id="consoleOutput"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <div class="status-left">
+    <span class="status-item">main*</span>
+    <span class="status-item" id="statusErrors">0 Errors</span>
+  </div>
+  <div class="status-right">
+    <span class="status-item" id="statusFormat" style="display:none; cursor:pointer;" onclick="app.formatDoc()">💅 Format</span>
+    <span class="status-item" id="statusAI" style="display:none; cursor:pointer; font-weight:bold;" onclick="app.switchSidebar('ai')">✨ AI</span>
+    <span class="status-item" id="statusLang">HTML</span>
+    <span class="status-item">UTF-8</span>
+    <span class="status-item">Spaces: 2</span>
+    <span class="status-item" style="cursor:pointer; text-decoration:underline;" onclick="app.showTutorials()">Show Tutorials</span>
+    <span class="status-item" style="cursor:pointer; font-weight:bold;" onclick="app.publishToSupabase()">Publish Project</span>
+  </div>
+</div>
+
+<!-- COMMUNITY FEED (YouTube-style) -->
+<div class="page-overlay" id="feedPage" style="background:#0f0f0f;">
+  <div class="page-topbar">
+    <div class="page-logo feed-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="4" fill="#ff4c4c"></rect><polygon points="10,9 16,12 10,15" fill="#fff"></polygon></svg>
+      CodeTube
+    </div>
+    <input class="page-search" id="feedSearch" placeholder="Search projects, creators..." oninput="social.feedQuery=this.value;social.renderFeed()">
+    <button class="page-close" onclick="social.closeFeed()">✕</button>
+  </div>
+  <div class="feed-body" id="feedBody"></div>
+</div>
+
+<!-- PROJECT STORE (Steam-style) -->
+<div class="page-overlay" id="storePage">
+  <div class="store-nav">
+    <div class="store-logo">🎮 CodeLab Store</div>
+    <div class="store-tabs">
+      <span class="store-tab active" data-tab="store" onclick="social.setStoreTab('store')">Store</span>
+      <span class="store-tab" data-tab="library" onclick="social.setStoreTab('library')">Library</span>
+      <span class="store-tab" data-tab="achievements" onclick="social.setStoreTab('achievements')">Achievements</span>
+    </div>
+    <button class="page-close" onclick="social.closeStore()">✕</button>
+  </div>
+  <div class="store-body" id="storeBody"></div>
+</div>
+
+<!-- COMMAND PALETTE -->
+<div class="cmd-overlay" id="cmdOverlay">
+  <div class="cmd-palette">
+    <input id="cmdInput" placeholder="Type a command... (run, publish, feed, store, tutorials)" oninput="social.renderCmdList()" onkeydown="social.cmdKey(event)">
+    <div class="cmd-list" id="cmdList"></div>
+  </div>
+</div>
+
+<!-- CLOUD CONSOLE (embedded dashboards + real data editors) -->
+<div class="page-overlay" id="cloudPage" style="background:#0b1220;">
+  <div class="page-topbar" style="background:#111827; border-bottom:1px solid #273449;">
+    <div class="page-logo" style="color:#93c5fd;">☁️ Cloud Console</div>
+    <div class="cloud-tabs" style="border:none; background:transparent; padding:0;">
+      <span class="cloud-tab active" data-tab="supabase" onclick="cloud.setTab('supabase')">⚡ Supabase</span>
+      <span class="cloud-tab" data-tab="firebase" onclick="cloud.setTab('firebase')">🔥 Firebase</span>
+    </div>
+    <button class="page-close" onclick="cloud.close()">✕</button>
+  </div>
+  <div class="cloud-body" id="cloudBody"></div>
+</div>
+
+<!-- CUSTOM MODAL SYSTEM -->
+<div class="custom-modal-overlay" id="modalOverlay">
+  <div class="custom-modal">
+    <h3 id="modalTitle">Title</h3>
+    <p id="modalDesc">Description</p>
+    <input type="text" id="modalInput" style="display:none;" onkeydown="if(event.key==='Enter'){event.preventDefault();app.confirmModal();} if(event.key==='Escape')app.closeModal();">
+    <div class="custom-modal-actions">
+      <button class="btn" onclick="app.closeModal()" id="modalCancel">Cancel</button>
+      <button class="btn" style="background:var(--accent); color:white; border:none;" onclick="app.confirmModal()" id="modalConfirm">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="js/login.js"></script>
+<script src="lang/python.js"></script>
+<script src="lang/c.js"></script>
+<script src="lang/java.js"></script>
+<script>
+// ============================================================
+// CodeLab IDE — Full Logic
+// ============================================================
+
+let monacoEditor = null;
+let isMonacoReady = false;
+
+// Supabase Config
+const SUPABASE_URL = 'https://uqcnotqjsvsxpywquirb.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_WqqI0M-reGe-fkPbb0oGOg_xlu39FuS'; 
+
+const app = {
+  currentProject: null,
+  projects: [],
+  STORAGE_KEY: 'codelab_ide_v9',
+  aiChat: [],
+  aiBusy: false,
+  autoEdit: localStorage.getItem('codelab_autoedit') !== '0',
+  extFilter: '',
+  currentSidebarView: 'explorer',
+  
+  // Extension Registry — Languages, Tools, AI & Cloud
+  extensions: [
+    { id: 'python', name: 'Python', icon: '🐍', color: '#3776AB', cat: 'Language', desc: 'IntelliSense, Linting, and Jupyter support (Pyodide).' },
+    { id: 'typescript', name: 'TypeScript', icon: 'TS', color: '#3178c6', cat: 'Language', desc: 'Type-safe JavaScript with REAL live runs — .ts files are transpiled in the editor and executed instantly.' },
+    { id: 'csharp', name: 'C# (.NET)', icon: 'C#', color: '#68217a', cat: 'Language', desc: 'C# syntax highlighting, IntelliSense and snippets for scripts & Unity-style games.' },
+    { id: 'cpp', name: 'C / C++ (Wasm)', icon: 'C++', color: '#5c6bc0', cat: 'Language', desc: 'Compile and run C/C++ directly in the browser.' },
+    { id: 'rust', name: 'Rust', icon: '🦀', color: '#dea584', cat: 'Language', desc: 'Systems programming with ferris-approved highlighting, macros and ownership-friendly snippets.' },
+    { id: 'go', name: 'Go', icon: '🐹', color: '#00add8', cat: 'Language', desc: 'Golang support with gofmt-style formatting habits and goroutine snippets.' },
+    { id: 'php', name: 'PHP', icon: '🐘', color: '#777bb4', cat: 'Language', desc: 'The web scripting classic — highlighting and helper snippets for the elephant language.' },
+    { id: 'java', name: 'Java (JAR)', icon: '☕', color: '#f34b7d', cat: 'Language', desc: 'Run pre-compiled JARs via CheerpJ WebAssembly.' },
+    { id: 'js', name: 'JavaScript Booster', icon: 'JS', color: '#f7df1e', cat: 'Language', desc: 'Advanced ES6+ snippets and auto-imports.', defaultInstalled: true },
+    { id: 'html', name: 'HTML CSS Support', icon: 'HTML', color: '#e34c26', cat: 'Language', desc: 'Class attribute completion for HTML.', defaultInstalled: true },
+    { id: 'markdown', name: 'Markdown Preview', icon: '📝', color: '#519aba', cat: 'Tool', desc: 'Live-render .md files in the preview pane — headings, code blocks, links and lists.' },
+    { id: 'prettier', name: 'Prettier Formatter', icon: '💅', color: '#f7b93e', cat: 'Tool', desc: 'One-tap document formatting for HTML, CSS and JS. Adds a Format button to the status bar.' },
+    { id: 'ai', name: 'AI Assistant', icon: '✨', color: '#a371f7', cat: 'AI', desc: 'Chat with your code! Bring your own API key — works with any OpenAI-compatible API (OpenAI, OpenRouter, Groq, Ollama...). Explains, comments, fixes and inserts code at your cursor.' },
+    { id: 'firebase', name: 'Firebase Kit', icon: '🔥', color: '#ffa000', cat: 'Cloud', desc: 'Connect a Firebase Realtime Database and publish projects with one click via REST.' },
+    { id: 'supabasepro', name: 'Supabase Pro', icon: '⚡', color: '#3ecf8e', cat: 'Cloud', desc: 'Use your OWN Supabase project for publishing and the CodeTube community feed.' },
+    { id: 'scratch', name: 'Scratch Blocks Pack', icon: '🧱', color: '#4c97ff', cat: 'Creative', desc: 'Scratch vibes: colorful editor theme + the classic “Blocky Cat Chase” starter project in the Store. (Scratch is block-based, so this is the text-code twin!)' }
+  ],
+
+  tutorials: [
+    { title: 'HTML Crash Course', id: 'mJgBOt2t2yE', desc: 'Learn the basics of HTML5.' },
+    { title: 'CSS Flexbox Guide', id: 'JJSoNQ7D77Y', desc: 'Master flexbox layout.' },
+    { title: 'JavaScript Basics', id: 'W6NZo97Uipe', desc: 'Variables, functions, and loops.' },
+    { title: 'Python for Beginners', id: 'rfscVS0vtbw', desc: 'Full Python course.' },
+    { title: 'Build a Snake Game', id: 'g4y2vXzXq7M', desc: 'Code a complete JS game in 15 minutes.' }
+  ],
+  currentTutIndex: 0,
+
+  init() {
+    this.load();
+    this.renderExtensions();
+    this.setupResizers();
+    this.setupDraggableWindow();
+    this.setupCustomModals();
+    social.init();
+    this.refreshExtensionUI();
+    this.wirePixlectAuth();
+    this.maybeShowLangPicker();
+    
+    
+    this.currentProject = this.projects[0];
+    this.renderFileTree();
+    this.renderTabs();
+
+    // Init Monaco
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs' } });
+    require(['vs/editor/editor.main'], () => {
+      monacoEditor = monaco.editor.create(document.getElementById('monacoContainer'), {
+        value: '', language: 'html', theme: 'vs-dark', automaticLayout: true,
+        fontSize: 14, minimap: { enabled: false }, scrollBeyondLastLine: false, tabSize: 2,
+        overviewRulerBorder: false, hideCursorInOverviewRuler: true, overviewRulerLanes: 0
+      });
+      monacoEditor.onDidChangeModelContent(() => {
+        const file = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+        if (file) file.content = monacoEditor.getValue();
+      });
+      
+      isMonacoReady = true;
+      this.loadActiveFile();
+    });
+
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); this.runCode(); }
+    });
+
+    window.addEventListener('message', e => {
+      if (e.data && e.data.type === 'codelab-console') {
+        this.appendConsole('> ' + e.data.message, e.data.level);
+      }
+    });
+  },
+
+  // --- CUSTOM ALERTS & MODALS ---
+  setupCustomModals() {
+    this.modalResolve = null;
+    this.modalMode = 'alert';
+  },
+
+  showAlert(title, desc, type='info') {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalDesc').textContent = desc;
+    document.getElementById('modalInput').style.display = 'none';
+    document.getElementById('modalCancel').style.display = 'none';
+    document.getElementById('modalConfirm').textContent = 'OK';
+    document.getElementById('modalOverlay').style.display = 'flex';
+  },
+
+  showPrompt(title, desc, defaultValue='') {
+    return new Promise((resolve) => {
+      this.modalResolve = resolve;
+      this.modalMode = 'prompt';
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalDesc').textContent = desc;
+      const input = document.getElementById('modalInput');
+      input.style.display = 'block';
+      input.value = defaultValue;
+      document.getElementById('modalCancel').style.display = 'block';
+      document.getElementById('modalConfirm').textContent = 'Submit';
+      document.getElementById('modalOverlay').style.display = 'flex';
+      setTimeout(() => input.focus(), 100);
+    });
+  },
+
+  confirmModal() {
+    const val = document.getElementById('modalInput').value;
+    this.closeModal();
+    if (this.modalMode === 'prompt' && this.modalResolve) {
+      this.modalResolve(val);
+      this.modalResolve = null;
+    }
+  },
+
+  closeModal() {
+    document.getElementById('modalOverlay').style.display = 'none';
+    if (this.modalMode === 'prompt' && this.modalResolve) {
+      this.modalResolve(null);
+      this.modalResolve = null;
+    }
+  },
+
+  showToast(msg, type='info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    let icon = 'ℹ️';
+    if (type === 'success') icon = '✅';
+    if (type === 'error') icon = '❌';
+    toast.innerHTML = `<span>${icon}</span> <span>${msg}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 300);
+    }, 3000);
+  },
+
+  // --- EXTENSIONS MARKETPLACE ---
+  isExtInstalled(id) {
+    const installed = JSON.parse(localStorage.getItem('codelab_extensions') || '{}');
+    const def = this.extensions.find(e => e.id === id);
+    return installed[id] || (def && def.defaultInstalled) || false;
+  },
+
+  refreshExtensionUI() {
+    const has = id => this.isExtInstalled(id);
+    const aiIcon = document.getElementById('icon-ai');
+    const intIcon = document.getElementById('icon-integrations');
+    const stAI = document.getElementById('statusAI');
+    const stFmt = document.getElementById('statusFormat');
+    if (aiIcon) aiIcon.style.display = has('ai') ? '' : 'none';
+    if (intIcon) intIcon.style.display = (has('firebase') || has('supabasepro')) ? '' : 'none';
+    if (stAI) stAI.style.display = has('ai') ? '' : 'none';
+    if (stFmt) stFmt.style.display = has('prettier') ? '' : 'none';
+    if (has('scratch')) document.body.classList.add('scratch-mode'); else document.body.classList.remove('scratch-mode');
+    if (this.currentSidebarView === 'ai') this.renderAI();
+    if (this.currentSidebarView === 'integrations') this.renderIntegrations();
+  },
+
+  renderExtensions() {
+    const installed = JSON.parse(localStorage.getItem('codelab_extensions') || '{}');
+    const list = document.getElementById('extList');
+    const q = (this.extFilter || '').toLowerCase();
+    const items = this.extensions.filter(e => !q || (e.name + ' ' + e.desc + ' ' + (e.cat || '')).toLowerCase().includes(q));
+    
+    list.innerHTML = items.length ? items.map(ext => {
+      const isInstalled = installed[ext.id] || ext.defaultInstalled;
+      return `
+        <div class="ext-item">
+          <div class="ext-icon" style="color:${ext.color}; background:${ext.color}20">${ext.icon}</div>
+          <div class="ext-info">
+            <div class="ext-cat">${ext.cat || 'Extension'}</div>
+            <div class="ext-name">${ext.name}</div>
+            <div class="ext-desc">${ext.desc}</div>
+            <button class="ext-btn ${isInstalled ? 'installed' : ''}" 
+              onclick="app.installExtension('${ext.id}', this)" 
+              ${isInstalled ? 'disabled' : ''}>
+              ${isInstalled ? 'Installed' : 'Install'}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('') : '<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px">No extensions match your search 🔍</div>';
+  },
+
+  installExtension(id, btn) {
+    btn.textContent = 'Installing...';
+    setTimeout(() => {
+      const installed = JSON.parse(localStorage.getItem('codelab_extensions') || '{}');
+      installed[id] = true;
+      localStorage.setItem('codelab_extensions', JSON.stringify(installed));
+      this.renderExtensions(); // Re-render to update UI
+      this.refreshExtensionUI();
+      this.showToast('Extension installed successfully!', 'success');
+      social.onInstallExtension();
+    }, 800);
+  },
+
+  // --- SIDEBAR SWITCHING ---
+  switchSidebar(view) {
+    this.currentSidebarView = view;
+    ['explorer', 'extensions', 'ai', 'integrations'].forEach(v => {
+      const el = document.getElementById('view-' + v);
+      if (el) el.style.display = v === view ? 'flex' : 'none';
+      const ic = document.getElementById('icon-' + v);
+      if (ic) ic.classList.toggle('active', v === view);
+    });
+    if (view === 'ai') this.renderAI();
+    if (view === 'integrations') this.renderIntegrations();
+  },
+
+  // --- SUPABASE PUBLISHING ---
+  async publishToSupabase() {
+    this.showToast('Publishing project to Supabase...', 'info');
+    
+    if (monacoEditor) {
+      const current = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+      if (current) current.content = monacoEditor.getValue();
+    }
+
+    try {
+      const cfg = this.supaConfig();
+      const response = await fetch(cfg.url + '/rest/v1/projects', {
+        method: 'POST',
+        headers: {
+          'apikey': cfg.key,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+          // No Authorization header needed for publishable keys
+        },
+        body: JSON.stringify({
+          title: this.currentProject.title || 'Untitled Project',
+          files: this.currentProject.files
+        })
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('Supabase response body:', errorBody);
+        throw new Error(`HTTP error! status: ${response.status} - ${errorBody}`);
+      }
+
+      const data = await response.json();
+      this.showToast('Successfully published to Supabase!', 'success');
+      this.appendConsole('Published successfully. ID: ' + (data[0] ? data[0].id : 'unknown'), 'info');
+      social.onPublish();
+      social.addPublished(data[0]);
+      
+    } catch (error) {
+      console.error('Supabase error:', error);
+      this.showToast('Failed to publish. Check API Key & Table.', 'error');
+      this.appendConsole('Publish Error: ' + error.message, 'error');
+    }
+  },
+
+  // --- PROJECT & FILES ---
+  load() {
+    try {
+      const d = localStorage.getItem(this.STORAGE_KEY);
+      this.projects = d ? JSON.parse(d) : this.sampleProjects();
+    } catch(e) { this.projects = this.sampleProjects(); }
+    if (!this.projects.length) this.projects = this.sampleProjects();
+    this.persist();
+  },
+  persist() { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.projects)); },
+  
+  sampleProjects() {
+    return [{
+      id: 'pen_1',
+      title: 'My First CodeLab Project',
+      activeFile: 'index.html',
+      files: [
+        { name: 'index.html', language: 'html', content: `<!-- Start coding here! -->\n<h1>Hello IDE!</h1>\n<p>Edit this and hit Ctrl+S to run.</p>\n<style>\n  body { font-family: system-ui; color: #333; padding: 20px; }\n  h1 { color: #007acc; }\n</style>` },
+        { name: 'style.css', language: 'css', content: `/* You can link this in index.html */\nbody {\n  background: #f0f0f0;\n}` },
+        { name: 'script.js', language: 'javascript', content: `// External JS file\nconsole.log("Script loaded!");` }
+      ]
+    }];
+  },
+
+  renderFileTree() {
+    const tree = document.getElementById('fileTree');
+    tree.innerHTML = this.currentProject.files.map(f => `
+      <div class="file-item ${f.name === this.currentProject.activeFile ? 'active' : ''}" onclick="app.openFile('${f.name}')">
+        <span style="color:${this.getIconColor(f.name)}">◈</span> ${f.name}
+      </div>
+    `).join('');
+  },
+
+  renderTabs() {
+    const tabs = document.getElementById('fileTabs');
+    tabs.innerHTML = this.currentProject.files.map(f => `
+      <div class="tab ${f.name === this.currentProject.activeFile ? 'active' : ''}" onclick="app.openFile('${f.name}')">
+        ${f.name}
+        <span class="close" onclick="app.deleteFile('${f.name}', event)">×</span>
+      </div>
+    `).join('');
+  },
+
+  getIconColor(name) {
+    if (name.endsWith('.html')) return '#e34c26';
+    if (name.endsWith('.css')) return '#264de4';
+    if (name.endsWith('.js')) return '#f1e05a';
+    if (name.endsWith('.ts')) return '#3178c6';
+    if (name.endsWith('.cs')) return '#68217a';
+    if (name.endsWith('.rs')) return '#dea584';
+    if (name.endsWith('.go')) return '#00add8';
+    if (name.endsWith('.php')) return '#777bb4';
+    if (name.endsWith('.md')) return '#519aba';
+    if (name.endsWith('.py')) return '#3776AB';
+    return '#aaa';
+  },
+
+  openFile(name) {
+    if (monacoEditor) {
+      const current = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+      if (current) current.content = monacoEditor.getValue();
+    }
+    this.currentProject.activeFile = name;
+    this.renderFileTree();
+    this.renderTabs();
+    this.loadActiveFile();
+  },
+
+  loadActiveFile() {
+    const file = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+    if (file) {
+      document.getElementById('statusLang').textContent = file.name.split('.').pop().toUpperCase();
+      if (isMonacoReady && monacoEditor) {
+        monaco.editor.setModelLanguage(monacoEditor.getModel(), this.getMonacoLang(file.name));
+        monacoEditor.setValue(file.content);
+      }
+    }
+    this.runCode();
+  },
+
+  getMonacoLang(name) {
+    if (name.endsWith('.html')) return 'html';
+    if (name.endsWith('.css')) return 'css';
+    if (name.endsWith('.js')) return 'javascript';
+    if (name.endsWith('.ts') || name.endsWith('.tsx')) return 'typescript';
+    if (name.endsWith('.cs')) return 'csharp';
+    if (name.endsWith('.rs')) return 'rust';
+    if (name.endsWith('.go')) return 'go';
+    if (name.endsWith('.php')) return 'php';
+    if (name.endsWith('.md')) return 'markdown';
+    if (name.endsWith('.py')) return 'python';
+    if (name.endsWith('.java')) return 'java';
+    if (name.endsWith('.c') || name.endsWith('.cpp')) return 'cpp';
+    return 'plaintext';
+  },
+
+  async promptAddFile() {
+    const name = await this.showPrompt('Create New File', 'Enter the file name (e.g., app.js, main.py, text.ts):', 'newfile.js');
+    if (!name) return;
+    if (this.currentProject.files.some(f => f.name === name)) {
+      this.showToast('File already exists!', 'error');
+      return;
+    }
+    // Auto-install the matching language pack so highlighting & tools just work
+    const ext = name.split('.').pop().toLowerCase();
+    const extMap = { ts: 'typescript', tsx: 'typescript', py: 'python', cs: 'csharp', rs: 'rust', go: 'go', php: 'php', md: 'markdown', java: 'java', c: 'cpp', cpp: 'cpp' };
+    const extId = extMap[ext];
+    if (extId && !this.isExtInstalled(extId)) {
+      const installed = JSON.parse(localStorage.getItem('codelab_extensions') || '{}');
+      installed[extId] = true;
+      localStorage.setItem('codelab_extensions', JSON.stringify(installed));
+      this.renderExtensions();
+      this.refreshExtensionUI();
+      this.showToast('🧩 Language pack auto-installed: ' + extId, 'success');
+      social.onInstallExtension();
+    }
+    this.currentProject.files.push({ name, language: this.getMonacoLang(name), content: '' });
+    this.openFile(name);
+  },
+
+  async deleteFile(name, e) {
+    e.stopPropagation();
+    if (this.currentProject.files.length <= 1) {
+      this.showToast('Cannot delete the last file.', 'error');
+      return;
+    }
+    this.currentProject.files = this.currentProject.files.filter(f => f.name !== name);
+    if (this.currentProject.activeFile === name) this.currentProject.activeFile = this.currentProject.files[0].name;
+    this.renderFileTree();
+    this.renderTabs();
+    this.loadActiveFile();
+  },
+
+  newProject() {
+    const id = 'pen_' + Date.now();
+    this.projects.push({ id, title: 'Untitled', activeFile: 'index.html', files: [{ name: 'index.html', language: 'html', content: '<h1>New Project</h1>' }] });
+    this.currentProject = this.projects[this.projects.length - 1];
+    this.persist();
+    this.renderFileTree();
+    this.renderTabs();
+    this.loadActiveFile();
+    this.showToast('New project created.', 'success');
+    social.unlock('newbie');
+    social.addXp(10);
+  },
+
+  saveProject() {
+    this.persist();
+    this.showToast('Project saved locally.', 'success');
+  },
+
+  // --- CLOUD CONFIG (Supabase Pro / Firebase Kit) ---
+  supaConfig() {
+    return {
+      url: (localStorage.getItem('codelab_supabase_url') || SUPABASE_URL),
+      key: (localStorage.getItem('codelab_supabase_key') || SUPABASE_KEY)
+    };
+  },
+
+  formatDoc() {
+    if (!monacoEditor) return;
+    monacoEditor.getAction('editor.action.formatDocument').run()
+      .then(() => this.showToast('Document formatted 💅', 'success'))
+      .catch(() => this.showToast('Formatter not available for this file type', 'error'));
+  },
+
+  // --- TYPE EXTENSION: live TypeScript transpile + run ---
+  async runTypeScript(file) {
+    this.appendConsole('▶ Compiling TypeScript → JavaScript...', 'info');
+    try {
+      if (!monaco.languages.typescript || !monaco.languages.typescript.getTypeScriptWorker) {
+        throw new Error('TypeScript worker still loading — try again in a second');
+      }
+      const uri = monaco.Uri.parse('file:///codelab/' + file.name);
+      let model = monaco.editor.getModel(uri);
+      if (!model) model = monaco.editor.createModel(file.content, 'typescript', uri);
+      else model.setValue(file.content);
+      const getWorker = await monaco.languages.typescript.getTypeScriptWorker();
+      const client = await getWorker(model.uri);
+      const out = await client.getEmitOutput(model.uri.toString());
+      const jsFile = out.outputFiles.find(f => f.name.endsWith('.js'));
+      if (!jsFile) throw new Error('No emit output — check for syntax errors');
+      const js = jsFile.text.replace(/<\/script/gi, '<\\/script');
+      this.appendConsole('✓ Transpiled successfully. Running...', 'info');
+      document.getElementById('previewFrame').srcdoc = this.consoleInject() +
+        '<html><body style="font-family:monospace; padding:20px; background:#1e1e1e; color:#4ec9b0;"><h3>⚡ TypeScript ran live</h3><p>Transpiled to JS in-editor. Console output is in the terminal below.</p></body></html><script>' + js + '<\/script>';
+    } catch (e) {
+      this.appendConsole('TypeScript error: ' + e.message, 'error');
+      document.getElementById('previewFrame').srcdoc = '<html><body style="font-family:monospace; padding:20px; background:#1e1e1e; color:#f85149;">TS compile failed: ' + e.message + '</body></html>';
+    }
+  },
+
+  // --- MARKDOWN PREVIEW EXTENSION ---
+  renderMarkdownPreview(file) {
+    document.getElementById('previewFrame').srcdoc = '<html><head><style>body{font-family:Georgia,serif;max-width:680px;margin:0 auto;padding:30px;line-height:1.6;color:#222;background:#fffdf5}h1,h2,h3{color:#1a1a2e}pre{background:#f0f0f0;padding:10px;border-radius:6px;overflow:auto}code{background:#f0f0f0;padding:1px 5px;border-radius:3px}a{color:#007acc}li{margin:4px 0}</style></head><body>' + this.mdToHtml(file.content) + '</body></html>';
+    this.appendConsole('📝 Markdown rendered (' + file.name + ')', 'info');
+  },
+
+  mdToHtml(md) {
+    return md.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/^### (.*)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.*)$/gm, '<h2>$1</h2>')
+      .replace(/^# (.*)$/gm, '<h1>$1</h1>')
+      .replace(/```([\s\S]*?)```/g, '<pre>$1</pre>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/\*([^*]+)\*/g, '<i>$1</i>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>')
+      .replace(/^[-*] (.*)$/gm, '<li>$1</li>');
+  },
+
+  // --- AI ASSISTANT EXTENSION (provider select screen) ---
+  aiProviders: [
+    { id: 'pollinations', name: '⚡ Easy Mode', base: 'https://text.pollinations.ai/openai', models: ['openai', 'openai-fast', 'mistral', 'qwen-coder'], needsKey: false, free: true, easy: true },
+    { id: 'openrouter', name: 'OpenRouter', base: 'https://openrouter.ai/api/v1', models: ['meta-llama/llama-3.3-70b-instruct:free', 'google/gemini-2.0-flash-exp:free', 'deepseek/deepseek-r1:free', 'qwen/qwen-2.5-72b-instruct:free'], needsKey: true, free: true, keyUrl: 'https://openrouter.ai/keys' },
+    { id: 'gemini',     name: 'Google Gemini', base: 'https://generativelanguage.googleapis.com/v1beta', models: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'], needsKey: true, gemini: true, keyUrl: 'https://aistudio.google.com/apikey' },
+    { id: 'groq',       name: 'Groq',          base: 'https://api.groq.com/openai/v1', models: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'gemma2-9b-it'], needsKey: true, free: true, keyUrl: 'https://console.groq.com/keys' },
+    { id: 'openai',     name: 'OpenAI',        base: 'https://api.openai.com/v1', models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'], needsKey: true, keyUrl: 'https://platform.openai.com/api-keys' },
+    { id: 'ollama',     name: 'Ollama (local)', base: 'http://localhost:11434/v1', models: ['llama3.2', 'qwen2.5-coder', 'mistral'], needsKey: false, free: true },
+    { id: 'lmstudio',   name: 'LM Studio (local)', base: 'http://localhost:1234/v1', models: ['local-model'], needsKey: false, free: true },
+    { id: 'custom',     name: 'Custom / Other', base: '', models: [], needsKey: true }
+  ],
+  aiProv: localStorage.getItem('codelab_ai_provider') || 'pollinations',
+
+  aiSaved() { try { return JSON.parse(localStorage.getItem('codelab_ai_keys') || '{}'); } catch (e) { return {}; } },
+
+  aiConfig() {
+    const saved = this.aiSaved()[this.aiProv] || {};
+    const def = this.aiProviders.find(p => p.id === this.aiProv) || { models: [] };
+    return { provider: this.aiProv, key: saved.key || '', model: saved.model || def.models[0] || '', base: saved.base || def.base || '' };
+  },
+
+  renderAI() { this.renderAISettings(); this.aiRender(); },
+
+  toggleAISettings(show) {
+    const el = document.getElementById('aiSettings');
+    if (el) el.style.display = (show === true || el.style.display === 'none') ? 'block' : 'none';
+    this.renderAISettings();
+  },
+
+  setAIProv(id) { this.aiProv = id; localStorage.setItem('codelab_ai_provider', id); this.renderAISettings(); },
+
+  renderAISettings() {
+    const el = document.getElementById('aiSettings'); if (!el) return;
+    const prov = this.aiProviders.find(p => p.id === this.aiProv);
+    const cfg = this.aiConfig();
+    const tag = prov.easy ? '⚡ FREE · NO KEY' : (prov.free && !prov.needsKey) ? 'FREE · LOCAL' : prov.free ? 'FREE TIER' : '';
+    el.innerHTML =
+      (prov.easy ? '<div style="font-size:10px;color:#89d185;padding:0 10px 6px">⚡ Easy mode is on — free cloud AI, works right now. No account, no key.</div>' : '') +
+      '<div class="ai-prov-grid">' + this.aiProviders.map(p => {
+        const t = p.easy ? '⚡ FREE · NO KEY' : (p.free && !p.needsKey) ? 'FREE · LOCAL' : p.free ? 'FREE TIER' : '';
+        return '<div class="ai-prov ' + (p.id === this.aiProv ? 'active' : '') + '" onclick="app.setAIProv(\'' + p.id + '\')" title="' + p.name + '">' +
+        '<b>' + p.name + '</b>' + (t ? '<span class="free">' + t + '</span>' : '') + '</div>';
+      }).join('') +
+      '</div>' +
+      (prov.needsKey
+        ? '<input id="aiKey" type="password" class="ext-search" style="margin:0 0 2px 0;" placeholder="API key for ' + prov.name + '" value="' + (cfg.key || '') + '" onchange="app.saveAISettings()">' +
+          (prov.keyUrl ? '<a href="' + prov.keyUrl + '" target="_blank" style="display:block;font-size:10px;color:#89d185;margin:0 10px 6px">🆓 Get a FREE key ↗</a>' : '')
+        : '<div style="font-size:10px;color:var(--text-dim);padding:0 10px 6px">🔑 No API key needed' + (prov.easy ? ' — free cloud service' : ' — runs on your machine') + '</div>') +
+      '<input id="aiModel" class="ext-search" style="margin:0 0 6px 0;" list="aiModelList" placeholder="Model" value="' + (cfg.model || '') + '" onchange="app.saveAISettings()">' +
+      '<datalist id="aiModelList">' + (prov.models || []).map(m => '<option value="' + m + '">').join('') + '</datalist>' +
+      '<input id="aiBase" class="ext-search" style="margin:0 0 6px 0;" placeholder="API base URL" value="' + (cfg.base || '') + '" onchange="app.saveAISettings()">' +
+      '<div style="display:flex;gap:6px;padding:0 10px 8px">' +
+      '<button class="ai-chip" style="flex:1" onclick="app.saveAISettings()">💾 Save</button>' +
+      '<button class="ai-chip" style="flex:1" onclick="app.testAI()">🔌 Test connection</button></div>' +
+      '<div style="font-size:10px;color:var(--text-dim);padding:0 10px 4px">Each provider keeps its own key — switch anytime. Gemini uses the Google AI API format.</div>';
+  },
+
+  saveAISettings() {
+    const saved = this.aiSaved();
+    const k = document.getElementById('aiKey'), m = document.getElementById('aiModel'), b = document.getElementById('aiBase');
+    const prov = this.aiProviders.find(p => p.id === this.aiProv);
+    saved[this.aiProv] = {
+      key: k ? k.value.trim() : '',
+      model: (m ? m.value.trim() : '') || prov.models[0] || '',
+      base: b ? b.value.trim() : ''
+    };
+    localStorage.setItem('codelab_ai_keys', JSON.stringify(saved));
+    localStorage.setItem('codelab_ai_provider', this.aiProv);
+    this.showToast('💾 ' + prov.name + ' configuration saved (stored only in your browser)', 'success');
+  },
+
+  async testAI() {
+    const prov = this.aiProviders.find(p => p.id === this.aiProv);
+    this.showToast('Testing ' + prov.name + '...', 'info');
+    try {
+      const txt = await this.aiComplete([{ role: 'user', content: 'Reply with exactly: OK' }], this.aiConfig());
+      this.showToast('✓ AI connected! Reply: ' + txt.slice(0, 40), 'success');
+    } catch (e) {
+      this.showToast('✗ ' + e.message, 'error');
+    }
+  },
+
+  async aiComplete(messages, cfg) {
+    if (cfg.provider === 'gemini') {
+      const sys = messages.find(m => m.role === 'system');
+      const contents = messages.filter(m => m.role !== 'system').map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+      const body = { contents: contents, generationConfig: { maxOutputTokens: 900 } };
+      if (sys) body.systemInstruction = { parts: [{ text: sys.content }] };
+      const res = await fetch(cfg.base + '/models/' + cfg.model + ':generateContent?key=' + encodeURIComponent(cfg.key), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      const text = data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts.map(p => p.text || '').join('');
+      if (!text) throw new Error((data.error && data.error.message) || 'No response from Gemini');
+      return text;
+    }
+    const res = await fetch(cfg.base + '/chat/completions', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, cfg.key ? { 'Authorization': 'Bearer ' + cfg.key } : {}),
+      body: JSON.stringify({ model: cfg.model, messages: messages, max_tokens: 900 })
+    });
+    const data = await res.json();
+    const msg = data.choices && data.choices[0] && data.choices[0].message;
+    if (!msg) throw new Error((data.error && data.error.message) || 'Unexpected response shape');
+    return msg.content;
+  },
+
+  escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  },
+
+  projectContext() {
+    let out = 'FULL PROJECT CONTEXT — you have constant access to every file and may edit any of them:';
+    this.currentProject.files.forEach(f => {
+      let c = f.content || '(empty file)';
+      if (c.length > 7000) c = c.slice(0, 7000) + '\n... (truncated)';
+      out += '\n\nFILE "' + f.name + '":\n```\n' + c + '\n```';
+    });
+    return out;
+  },
+
+  parseFileBlocks(content) {
+    const blocks = [];
+    const fence = /```([^`\n]*)\n([\s\S]*?)```/g;
+    let m;
+    while ((m = fence.exec(content)) !== null) {
+      const info = (m[1] || '').trim();
+      let name = null;
+      let code = m[2];
+      // 1) info IS the filename: ```index.html
+      if (/^[\w.-]+\.[a-zA-Z0-9]{1,5}$/.test(info)) name = info;
+      // 2) lang + filename: ```html index.html or ```js:app.js
+      const infoM = info.match(/^[\w+#.-]*[:\s]+([\w./-]+\.[a-zA-Z0-9]+)\s*$/);
+      if (!name && infoM) name = infoM[1];
+      // 3) // FILE: name or # FILE: name as first line inside the block
+      const cmt = code.match(/^(?:\/\/|#)\s*FILE:\s*([\w./-]+\.[a-zA-Z0-9]+)\s*\n/);
+      if (!name && cmt) { name = cmt[1]; code = code.replace(/^(?:\/\/|#)\s*FILE:\s*[\w./-]+\.[a-zA-Z0-9]+\s*\n/, ''); }
+      // 4) filename mentioned right before the fence: **index.html**, ### index.html, File: index.html
+      if (!name) {
+        const before = content.slice(Math.max(0, m.index - 120), m.index);
+        const refs = before.match(/[\w./-]+\.(?:html|css|js|ts|tsx|py|cs|rs|go|php|java|md|json)\b/g);
+        if (refs && refs.length) name = refs[refs.length - 1];
+      }
+      // 5) bare language → the one matching project file (```html → index.html if it is the only .html)
+      if (!name) {
+        const langMap = { html: 'html', css: 'css', js: 'js', javascript: 'js', ts: 'ts', python: 'py', py: 'py' };
+        const ext = langMap[info.toLowerCase()];
+        if (ext) {
+          const matches = this.currentProject.files.filter(f => f.name.toLowerCase().endsWith('.' + ext));
+          if (matches.length === 1) name = matches[0].name;
+        }
+      }
+      if (name) blocks.push({ name: name, code: code.replace(/\s*$/, '') });
+    }
+    return blocks;
+  },
+
+  applyAIChanges(blocks) {
+    const created = [], updated = [];
+    blocks.forEach(b => {
+      const existing = this.currentProject.files.find(f => f.name === b.name);
+      if (existing) { existing.content = b.code; updated.push(b.name); }
+      else { this.currentProject.files.push({ name: b.name, language: this.getMonacoLang(b.name), content: b.code }); created.push(b.name); }
+    });
+    if (monacoEditor) {
+      const cur = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+      if (cur) monacoEditor.setValue(cur.content);
+    }
+    this.renderFileTree(); this.renderTabs(); this.persist(); this.runCode();
+    const n = created.length + updated.length;
+    if (n) {
+      this.showToast('🤖 AI edited ' + n + ' file' + (n > 1 ? 's' : '') + ' in real time: ' + created.map(x => '+ ' + x).concat(updated.map(x => '~ ' + x)).join(', '), 'success');
+      social.addXp(4);
+    }
+  },
+
+  toggleAutoEdit() {
+    this.autoEdit = !this.autoEdit;
+    localStorage.setItem('codelab_autoedit', this.autoEdit ? '1' : '0');
+    this.showToast(this.autoEdit ? '🤖 Auto-edit ON — the AI now edits your files in real time' : 'Auto-edit OFF — AI code must be applied manually', this.autoEdit ? 'success' : 'info');
+    this.aiRender();
+  },
+
+  aiRender() {
+    const el = document.getElementById('aiChat'); if (!el) return;
+    el.innerHTML = this.aiChat.map(m =>
+      '<div class="ai-msg ' + (m.role === 'user' ? 'ai-user' : m.error ? 'ai-err' : 'ai-bot') + '">' +
+      this.escapeHtml(m.content) +
+      (m.role === 'assistant' && !m.error && m.files && m.files.length
+        ? '<div class="ai-edited">⚡ real-time edit: ' + m.files.map(f => this.escapeHtml(f)).join(', ') + '</div>' : '') +
+      (m.role === 'assistant' && !m.error
+        ? '<button class="ai-insert" onclick="app.aiInsert()">⬇ Insert at cursor</button>' +
+          '<button class="ai-insert" onclick="app.aiApply()">📄 Apply to file</button>' +
+          '<button class="ai-insert" onclick="app.aiNewFile()">📁 Save as new file</button>'
+        : '') +
+      '</div>'
+    ).join('');
+    el.scrollTop = el.scrollHeight;
+    const chip = document.getElementById('autoEditChip');
+    if (chip) chip.textContent = '🤖 Auto-edit: ' + (this.autoEdit ? 'ON' : 'OFF');
+    const bar = document.getElementById('aiFilesBar');
+    if (bar) bar.innerHTML = '🔌 <b>Constant file access</b> — watching ' + this.currentProject.files.length + ' file' + (this.currentProject.files.length > 1 ? 's' : '') + ': ' + this.currentProject.files.map(f => this.escapeHtml(f.name)).join(', ');
+  },
+
+  aiLastCode() {
+    const last = [...this.aiChat].reverse().find(m => m.role === 'assistant' && !m.error);
+    if (!last) return null;
+    const fence = last.content.match(/```[a-z]*\n([\s\S]*?)```/);
+    if (fence) return fence[1];
+    const inline = last.content.match(/`([^`]+)`/);
+    return inline ? inline[1] : last.content;
+  },
+
+  aiInsert() {
+    const code = this.aiLastCode();
+    if (code == null) { this.showToast('No code in the last reply', 'error'); return; }
+    if (monacoEditor) {
+      monacoEditor.executeEdits('ai', [{ range: monacoEditor.getSelection(), text: code, forceMoveMarkers: true }]);
+      monacoEditor.focus();
+      this.showToast('AI code inserted at cursor ✨', 'success');
+    }
+  },
+
+  aiApply() {
+    const code = this.aiLastCode();
+    if (code == null) { this.showToast('No code block in the last reply', 'error'); return; }
+    const file = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+    if (!file) return;
+    file.content = code;
+    if (monacoEditor) monacoEditor.setValue(code);
+    this.runCode();
+    this.showToast('📄 Applied to ' + file.name + ' — Ctrl+Z in the editor to undo', 'success');
+    social.addXp(3);
+  },
+
+  async quickFix() {
+    if (!this.isExtInstalled('ai')) { this.showToast('Install the AI Assistant extension first! 🧩', 'error'); this.switchSidebar('extensions'); return; }
+    const file = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+    if (!file || !(file.content || '').trim()) { this.showToast('Write some code first — then Quick Fix it ⚡', 'error'); return; }
+    this.switchSidebar('ai');
+    this.aiSend('Fix any bugs, errors or bad practices in this file. Return ONLY the full corrected file in a single code block, ready to replace the original.', true);
+  },
+
+  async aiNewFile() {
+    const code = this.aiLastCode();
+    if (code == null) { this.showToast('No code block in the last reply', 'error'); return; }
+    const name = await this.showPrompt('New file from AI', 'File name:', 'ai-snippet.js');
+    if (!name) return;
+    if (this.currentProject.files.some(f => f.name === name)) { this.showToast('File already exists!', 'error'); return; }
+    this.currentProject.files.push({ name: name, language: this.getMonacoLang(name), content: code });
+    this.openFile(name);
+    this.showToast('📁 Created ' + name + ' from AI code', 'success');
+  },
+
+  async aiSend(preset, autoApply) {
+    if (!this.isExtInstalled('ai')) { this.showToast('Install the AI Assistant extension first! 🧩', 'error'); this.switchSidebar('extensions'); return; }
+    const cfg = this.aiConfig();
+    const prov = this.aiProviders.find(p => p.id === cfg.provider);
+    if (prov.needsKey && !cfg.key) { this.showToast('Add your ' + prov.name + ' API key in ⚙ settings.', 'error'); this.toggleAISettings(true); return; }
+    if (!cfg.base || !cfg.model) { this.showToast('Set the base URL and model in ⚙ settings.', 'error'); this.toggleAISettings(true); return; }
+    const inputEl = document.getElementById('aiInput');
+    const text = (preset || (inputEl && inputEl.value) || '').trim();
+    if (!text || this.aiBusy) return;
+    if (inputEl) inputEl.value = '';
+    const file = this.currentProject.files.find(f => f.name === this.currentProject.activeFile) || { name: 'untitled', content: '' };
+    const history = this.aiChat.filter(m => !m.error).slice(-6).map(m => ({ role: m.role, content: m.content }));
+    this.aiChat.push({ role: 'user', content: text });
+    this.aiRender();
+    this.aiBusy = true;
+    try {
+      const reply = await this.aiComplete([
+        { role: 'system', content: 'You are CodeLab AI, an autonomous coding agent with CONSTANT, full access to the user\'s project files, and you edit them in real time. FILE-EDIT FORMAT (mandatory): whenever you create or change any file, output its COMPLETE final content in a fenced code block whose info line ends with the exact filename — like ```html index.html or ```js game.js. Never partial diffs — always the full file. Use the existing filename to update, a new filename to create. Briefly explain changes outside the blocks. For plain questions, just answer normally.' },
+        ...history,
+        { role: 'user', content: text + '\n\n' + this.projectContext() + '\n\nCurrently open file: "' + file.name + '". Apply requested changes directly using filename-tagged code blocks.' }
+      ], cfg);
+      const blocks = this.autoEdit ? this.parseFileBlocks(reply) : [];
+      this.aiChat.push({ role: 'assistant', content: reply, files: blocks.map(b => b.name) });
+      if (blocks.length) { this.appendConsole('🤖 Auto-edit: applying ' + blocks.length + ' file block(s) — ' + blocks.map(b => b.name).join(', '), 'info'); this.applyAIChanges(blocks); }
+      else if (this.autoEdit) this.appendConsole('🤖 Auto-edit: no filename-tagged code blocks in this reply (question-only answer, or the model did not tag files). Try: "edit the files directly".', 'info');
+      if (!blocks.length && autoApply) this.aiApply();
+      social.addXp(3);
+    } catch (e) {
+      this.aiChat.push({ role: 'assistant', error: true, content: '⚠️ ' + e.message + '\n\nCheck the key / model / base URL in ⚙ settings, then press 🔌 Test connection.' });
+    }
+    this.aiBusy = false;
+    this.aiRender();
+  },
+
+  // --- INTEGRATIONS PANEL (Supabase Pro + Firebase Kit) ---
+  renderIntegrations() {
+    const body = document.getElementById('integBody'); if (!body) return;
+    let html = '';
+    if (this.isExtInstalled('supabasepro')) {
+      html += '<div class="integ-card"><h4>⚡ Supabase</h4><p>Your own project powers “Publish to Supabase” and the CodeTube community feed. Leave empty to use the built-in CodeLab cloud.</p>' +
+        '<input id="supaUrl" placeholder="Project URL (https://xxx.supabase.co)" value="' + (localStorage.getItem('codelab_supabase_url') || '') + '">' +
+        '<input id="supaKey" placeholder="Publishable / anon key" value="' + (localStorage.getItem('codelab_supabase_key') || '') + '">' +
+        '<div class="integ-row"><button class="ext-btn" onclick="app.saveSupa()">Save</button><button class="ext-btn" style="background:var(--success)" onclick="app.publishToSupabase()">Publish now</button><button class="ext-btn" onclick="cloud.open()">🖥️ Console</button></div></div>';
+    }
+    if (this.isExtInstalled('firebase')) {
+      html += '<div class="integ-card"><h4>🔥 Firebase</h4><p>Publishes your project JSON to a Firebase Realtime Database via REST. Allow public writes in your database rules (or add auth later).</p>' +
+        '<input id="fbUrl" placeholder="https://your-db-default-rtdb.firebaseio.com" value="' + (localStorage.getItem('codelab_firebase_db') || '') + '">' +
+        '<div class="integ-row"><button class="ext-btn" onclick="app.saveFirebase()">Save</button><button class="ext-btn" style="background:#ffa000" onclick="app.publishFirebase()">🔥 Publish</button><button class="ext-btn" onclick="cloud.open()">🖥️ Console</button></div></div>';
+    }
+    if (!html) html = '<p style="color:var(--text-dim);font-size:12px">Install the <b>Supabase Pro</b> or <b>Firebase Kit</b> extension to configure cloud publishing.</p>';
+    body.innerHTML = html;
+  },
+
+  saveSupa() {
+    const u = document.getElementById('supaUrl').value.trim();
+    const k = document.getElementById('supaKey').value.trim();
+    if (u) localStorage.setItem('codelab_supabase_url', u); else localStorage.removeItem('codelab_supabase_url');
+    if (k) localStorage.setItem('codelab_supabase_key', k); else localStorage.removeItem('codelab_supabase_key');
+    this.showToast('Supabase configuration saved ⚡', 'success');
+  },
+
+  saveFirebase() {
+    const u = document.getElementById('fbUrl').value.trim().replace(/\/+$/, '');
+    if (u) localStorage.setItem('codelab_firebase_db', u); else localStorage.removeItem('codelab_firebase_db');
+    this.showToast('Firebase database saved 🔥', 'success');
+  },
+
+  async publishFirebase() {
+    const db = localStorage.getItem('codelab_firebase_db');
+    if (!db) { this.showToast('Add your Firebase database URL first!', 'error'); return; }
+    if (monacoEditor) {
+      const current = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+      if (current) current.content = monacoEditor.getValue();
+    }
+    this.showToast('Publishing to Firebase...', 'info');
+    try {
+      const res = await fetch(db + '/projects/' + Date.now() + '.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: this.currentProject.title || 'Untitled Project', files: this.currentProject.files, publishedAt: new Date().toISOString() })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      this.showToast('🔥 Published to Firebase!', 'success');
+      social.addXp(15);
+    } catch (e) {
+      this.showToast('Firebase publish failed — check the URL & rules.', 'error');
+      this.appendConsole('Firebase error: ' + e.message, 'error');
+    }
+  },
+
+  // --- RUN CODE ---
+  runCode() {
+    if (!this.currentProject) return;
+    const consoleEl = document.getElementById('consoleOutput');
+    consoleEl.innerHTML = '';
+    
+    // If current file is Python, show a simulated output for now
+    const activeFile = this.currentProject.files.find(f => f.name === this.currentProject.activeFile);
+    if (activeFile && activeFile.name.endsWith('.py')) {
+       this.appendConsole('▶ Running Python file...', 'info');
+       this.appendConsole('Simulated Python Output:', 'info');
+       this.appendConsole('Hello from Python!', 'log');
+       document.getElementById('previewFrame').srcdoc = '<html><body style="font-family:monospace; padding:20px; background:#1e1e1e; color:#ccc;"><h3>Python Execution</h3><p>Check the terminal below for output.</p></body></html>';
+       return;
+    }
+
+    const ext = activeFile ? activeFile.name.split('.').pop().toLowerCase() : '';
+    if (ext === 'ts') { this.runTypeScript(activeFile); return; }
+    if (ext === 'md' && this.isExtInstalled('markdown')) { this.renderMarkdownPreview(activeFile); return; }
+    if (['java', 'cs', 'tsx', 'c', 'cpp', 'rs', 'go', 'php'].includes(ext)) {
+      this.appendConsole('▶ ' + ext.toUpperCase() + ' file — syntax highlighting & IntelliSense are active, but browsers cannot execute ' + ext.toUpperCase() + ' natively. Try JS, TS, Python or HTML for a live run!', 'warn');
+      document.getElementById('previewFrame').srcdoc = '<html><body style="font-family:monospace; padding:20px; background:#1e1e1e; color:#ccc;"><h3>🖥️ ' + ext.toUpperCase() + ' project</h3><p style="color:#89d185">Editor support is enabled for this language.</p><p>Live in-browser execution is coming via WebAssembly runtimes — for now, use JS / TS / Python / HTML for live preview.</p></body></html>';
+      return;
+    }
+
+    const htmlFile = this.currentProject.files.find(f => f.name.endsWith('.html'));
+    let html = htmlFile ? htmlFile.content : '';
+
+    // Robust JS/CSS inlining: strip project-file references in ANY form (./name, defer, module...),
+    // then inject ALL css into <head> and ALL js before </body> so the DOM is always ready.
+    const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    let cssBlocks = '', jsBlocks = '';
+    this.currentProject.files.forEach(f => {
+      const safe = escRe(f.name);
+      if (f.name.endsWith('.css')) {
+        cssBlocks += '\n<style>\n' + f.content + '\n</style>';
+        html = html.replace(new RegExp('<link[^>]*href=["\']?(?:\\./)?' + safe + '["\'][^>]*>', 'gi'), '');
+      }
+      if (f.name.endsWith('.js')) {
+        jsBlocks += '\n<script>\n' + f.content.replace(/<\/script/gi, '<\\/script') + '\n<\/script>';
+        html = html.replace(new RegExp('<script[^>]*src=["\']?(?:\\./)?' + safe + '["\'][^>]*>\\s*<\/script>', 'gi'), '');
+      }
+    });
+    if (cssBlocks) html = html.includes('</head>') ? html.replace('</head>', cssBlocks + '\n</head>') : cssBlocks + html;
+    if (jsBlocks) html = html.includes('</body>') ? html.replace('</body>', jsBlocks + '\n</body>') : html + jsBlocks;
+
+    document.getElementById('previewFrame').srcdoc = this.consoleInject() + html;
+  },
+
+  // Shared console-capture injection for all preview frames
+  consoleInject() {
+    return `
+      <script>
+        (function(){
+          const send=(t,a)=>parent.postMessage({type:'codelab-console',level:t,message:a.map(x=>{try{return typeof x==='object'?JSON.stringify(x):String(x)}catch(e){return String(x)}}).join(' ')},'*');
+          ['log','warn','error','info'].forEach(m=>{const o=console[m];console[m]=function(...a){send(m,a);o.apply(console,a)}});
+          window.addEventListener('error',e=>parent.postMessage({type:'codelab-console',level:'error',message:e.message+' (line '+e.lineno+')'},'*'));
+        })();
+      <\/script>
+    `;
+  },
+
+  appendConsole(msg, level) {
+    const el = document.getElementById('consoleOutput');
+    const d = document.createElement('div');
+    d.className = 'console-line ' + (level || '');
+    d.textContent = msg;
+    el.appendChild(d);
+    el.scrollTop = el.scrollHeight;
+  },
+
+  // --- PIXLECT ACCOUNT SYSTEM ---
+  wirePixlectAuth() {
+    if (!window.PixlectAuth) return;
+    window.PixlectAuth.onChange((user) => {
+      if (user) this.showToast('👋 Welcome, ' + user.username + ' (PIXLECT Account)', 'success');
+    });
+  },
+
+  pixlectUser() { return (window.PixlectAuth && window.PixlectAuth.user) || null; },
+
+  // --- CHOOSE YOUR LANGUAGE (first run) ---
+  langPickerChoices: [
+    { id: 'js',    icon: 'JS', color: '#f7df1e', name: 'JavaScript' },
+    { id: 'html',  icon: '<>', color: '#e34c26', name: 'HTML / CSS' },
+    { id: 'py',    icon: '🐍', color: '#3776AB', name: 'Python' },
+    { id: 'ts',    icon: 'TS', color: '#3178c6', name: 'TypeScript' },
+    { id: 'cpp',   icon: 'C++', color: '#5c6bc0', name: 'C / C++' },
+    { id: 'csharp',icon: 'C#', color: '#68217a', name: 'C #' }
+  ],
+
+  maybeShowLangPicker() {
+    if (!localStorage.getItem('codelab_lang_chosen')) {
+      const grid = document.getElementById('langPickGrid');
+      if (!grid) return;
+      grid.innerHTML = this.langPickerChoices.map(l =>
+        '<button onclick="app.pickLanguage(\'' + l.id + '\')" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 8px;background:var(--bg);border:1px solid var(--border);border-radius:10px;cursor:pointer;color:#fff;font-weight:bold;transition:transform .1s,border-color .1s" onmouseover="this.style.borderColor=\'' + l.color + '\'" onmouseout="this.style.borderColor=\'var(--border)\'">' +
+          '<span style="font-size:26px;color:' + l.color + ';font-family:monospace">' + l.icon + '</span>' +
+          '<span style="font-size:13px">' + l.name + '</span>' +
+        '</button>').join('');
+      document.getElementById('langPickOverlay').style.display = 'flex';
+    }
+  },
+
+  pickLanguage(id) {
+    localStorage.setItem('codelab_lang_chosen', id);
+    const extMap = { js: 'js', html: 'html', py: 'python', ts: 'typescript', cpp: 'cpp', csharp: 'csharp' };
+    const extId = extMap[id];
+    if (extId && !this.isExtInstalled(extId)) {
+      const installed = JSON.parse(localStorage.getItem('codelab_extensions') || '{}');
+      installed[extId] = true;
+      localStorage.setItem('codelab_extensions', JSON.stringify(installed));
+      this.renderExtensions();
+      this.refreshExtensionUI();
+      social.onInstallExtension();
+    }
+    this.closeLangPicker();
+    this.showToast('🧩 ' + id.toUpperCase() + ' language pack installed — happy coding!', 'success');
+  },
+
+  closeLangPicker() {
+    localStorage.setItem('codelab_lang_chosen', localStorage.getItem('codelab_lang_chosen') || 'skipped');
+    document.getElementById('langPickOverlay').style.display = 'none';
+  },
+
+  // --- SCRATCH TUTORIALS ---
+  showTutorials() {
+    const win = document.getElementById('scratchTut');
+    win.style.display = 'flex';
+    this.loadTutorial(0);
+  },
+
+  loadTutorial(index) {
+    if (index >= this.tutorials.length) index = 0;
+    this.currentTutIndex = index;
+    
+    const tut = this.tutorials[index];
+    document.getElementById('tutVideo').src = `https://www.youtube.com/embed/${tut.id}?rel=0`;
+    
+    const dots = document.getElementById('tutDots');
+    dots.innerHTML = this.tutorials.map((_, i) => 
+      `<div class="tut-dot ${i === index ? 'active' : ''}"></div>`
+    ).join('');
+  },
+
+  nextTutorial() {
+    this.loadTutorial(this.currentTutIndex + 1);
+    social.unlock('scholar');
+  },
+
+  setupDraggableWindow() {
+    const win = document.getElementById('scratchTut');
+    const header = document.getElementById('tutHeader');
+    let isDragging = false, startX, startY, startLeft, startTop;
+
+    header.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = win.offsetLeft;
+      startTop = win.offsetTop;
+      win.style.bottom = 'auto';
+      win.style.right = 'auto';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      win.style.left = `${startLeft + dx}px`;
+      win.style.top = `${startTop + dy}px`;
+    });
+
+    document.addEventListener('mouseup', () => { isDragging = false; });
+  },
+
+  // --- RESIZERS ---
+  setupResizers() {
+    const startResize = (type, e) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      
+      if (type === 'h') {
+        const sidebar = document.getElementById('sidebar');
+        const startWidth = sidebar.offsetWidth;
+        const onMove = (ev) => { sidebar.style.width = (startWidth + ev.clientX - startX) + 'px'; };
+        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+      } 
+      else if (type === 'v') {
+        const codePane = document.getElementById('codePane');
+        const split = document.getElementById('editorSplit');
+        const startWidth = codePane.offsetWidth;
+        const onMove = (ev) => { 
+          const newW = startWidth + ev.clientX - startX;
+          const percent = (newW / split.offsetWidth) * 100;
+          if (percent > 20 && percent < 85) codePane.style.flex = `0 0 ${percent}%`;
+        };
+        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+      }
+    };
+    this.startResize = startResize;
+  }
+};
+
+// ============================================================
+// CodeLab Social — CodeTube Feed (YouTube-style), Project Store
+// (Steam-style), Remix (Scratch-style), XP & Achievements,
+// and the Command Palette (Ctrl+Shift+P)
+// ============================================================
+const SNIP = {
+  snake: '<!DOCTYPE html><html><head><style>body{margin:0;background:#0a0a12;display:flex;align-items:center;justify-content:center;height:100vh;font-family:monospace}canvas{box-shadow:0 0 40px #0f0;border-radius:8px}</style></head><body><canvas id="c" width="420" height="420"></canvas><script>\nvar c=document.getElementById("c"),x=c.getContext("2d"),s=[{x:10,y:10}],d=[1,0],f={x:15,y:15},sc=0;\ndocument.addEventListener("keydown",function(e){if(e.key==="ArrowUp"&&d[1]===0)d=[0,-1];if(e.key==="ArrowDown"&&d[1]===0)d=[0,1];if(e.key==="ArrowLeft"&&d[0]===0)d=[-1,0];if(e.key==="ArrowRight"&&d[0]===0)d=[1,0];});\nsetInterval(function(){var h={x:(s[0].x+d[0]+21)%21,y:(s[0].y+d[1]+21)%21};if(s.some(function(p){return p.x===h.x&&p.y===h.y})){s=[{x:10,y:10}];sc=0;d=[1,0];}s.unshift(h);if(h.x===f.x&&h.y===f.y){sc+=10;f={x:Math.floor(Math.random()*21),y:Math.floor(Math.random()*21)};}else{s.pop();}\nx.fillStyle="#0a0a12";x.fillRect(0,0,420,420);x.fillStyle="#4cff4c";s.forEach(function(p){x.fillRect(p.x*20,p.y*20,18,18)});x.fillStyle="#ff4c4c";x.fillRect(f.x*20,f.y*20,18,18);x.fillStyle="#fff";x.font="14px monospace";x.fillText("SCORE "+sc,8,16);},90);\nconsole.log("Snake loaded — use the arrow keys!");\n<\/script></body></html>',
+  cookie: '<!DOCTYPE html><html><head><style>body{margin:0;font-family:system-ui;background:#2b1d0e;color:#fff;text-align:center;padding-top:40px}#cookie{font-size:110px;cursor:pointer;transition:transform .08s;display:inline-block}#cookie:active{transform:scale(.9)}button{padding:8px 16px;border:none;border-radius:6px;background:#c8871e;color:#fff;font-weight:bold;cursor:pointer;margin-top:10px}</style></head><body><h1>🍪 Cookie Clicker</h1><div id="cookie">🍪</div><div id="score" style="font-size:24px;margin:10px">0 cookies</div><button onclick="buy()">Buy auto-clicker — 15 cookies</button><script>\nvar n=0,auto=0;var el=document.getElementById("score");\ndocument.getElementById("cookie").onclick=function(){n++;upd();};\nfunction buy(){if(n>=15){n-=15;auto++;upd();}}\nfunction upd(){el.textContent=n+" cookies";}\nsetInterval(function(){n+=auto;upd();},1000);\nconsole.log("Click the cookie!");\n<\/script></body></html>',
+  starfield: '<!DOCTYPE html><html><head><style>body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style></head><body><canvas id="c"></canvas><script>\nvar c=document.getElementById("c"),x=c.getContext("2d");c.width=innerWidth;c.height=innerHeight;\nvar stars=[];for(var i=0;i<400;i++)stars.push({x:Math.random()*2-1,y:Math.random()*2-1,z:Math.random()});\nfunction loop(){x.fillStyle="rgba(0,0,0,0.4)";x.fillRect(0,0,c.width,c.height);x.fillStyle="#fff";\nstars.forEach(function(s){s.z-=0.008;if(s.z<=0.01){s.x=Math.random()*2-1;s.y=Math.random()*2-1;s.z=1;}\nvar px=c.width/2+s.x/s.z*250,py=c.height/2+s.y/s.z*250,r=(1-s.z)*2.5;\nx.beginPath();x.arc(px,py,r,0,7);x.fill();});\nrequestAnimationFrame(loop);}loop();\n<\/script></body></html>',
+  fireworks: '<!DOCTYPE html><html><head><style>body{margin:0;background:#050510;overflow:hidden}canvas{display:block}h1{position:fixed;top:10px;left:10px;color:#fff;font-family:sans-serif;font-size:14px;opacity:.6}</style></head><body><canvas id="c"></canvas><h1>🎆 Click anywhere to launch fireworks</h1><script>\nvar c=document.getElementById("c"),x=c.getContext("2d");c.width=innerWidth;c.height=innerHeight;var ps=[];\nc.onclick=function(e){var h=Math.random()*360;for(var i=0;i<60;i++){var a=Math.random()*6.28,sp=Math.random()*6;ps.push({x:e.clientX,y:e.clientY,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,h:h});}};\nfunction loop(){x.fillStyle="rgba(5,5,16,0.25)";x.fillRect(0,0,c.width,c.height);\nps=ps.filter(function(p){p.x+=p.vx;p.y+=p.vy;p.vy+=0.08;p.life-=0.015;return p.life>0;});\nps.forEach(function(p){x.globalAlpha=p.life;x.fillStyle="hsl("+p.h+",100%,60%)";x.fillRect(p.x,p.y,3,3);});x.globalAlpha=1;requestAnimationFrame(loop);}loop();\n<\/script></body></html>',
+  drums: '<!DOCTYPE html><html><head><style>body{margin:0;font-family:system-ui;background:#181828;color:#fff;text-align:center;padding-top:30px;position:relative}#pads{display:grid;grid-template-columns:repeat(3,120px);gap:14px;justify-content:center;margin-top:20px}.pad{height:110px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:34px;cursor:pointer;transition:transform .06s;box-shadow:0 6px 0 rgba(0,0,0,.4);position:relative}.pad:active{transform:translateY(4px)}.pad small{position:absolute;bottom:6px;font-size:10px;opacity:.7}</style></head><body><h1>🥁 Drum Pads</h1><p>Click a pad or press keys 1–6</p><div id="pads"></div><script>\nvar sounds=[{f:60,c:"#e74c3c",i:"🥊",n:"kick"},{f:180,c:"#e67e22",i:"🪘",n:"snare"},{f:700,c:"#f1c40f",i:"🎩",n:"hat"},{f:120,c:"#2ecc71",i:"🥁",n:"tom"},{f:400,c:"#3498db",i:"👏",n:"clap"},{f:520,c:"#9b59b6",i:"🐄",n:"cowbell"}];\nvar box=document.getElementById("pads");var ctx=new (window.AudioContext||window.webkitAudioContext)();\nsounds.forEach(function(s,i){var d=document.createElement("div");d.className="pad";d.style.background=s.c;d.innerHTML=s.i+"<small>"+(i+1)+"</small>";d.onclick=function(){play(s);};box.appendChild(d);});\ndocument.addEventListener("keydown",function(e){var i=parseInt(e.key)-1;if(i>=0&&i<6)play(sounds[i]);});\nfunction play(s){var o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=s.f;o.type="sine";g.gain.setValueAtTime(0.5,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.25);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.3);console.log("♪ "+s.n);}\n<\/script></body></html>',
+  piano: '<!DOCTYPE html><html><head><style>body{margin:0;font-family:system-ui;background:#111;text-align:center;padding-top:30px;color:#fff}#keys{display:flex;justify-content:center;margin-top:30px}.k{width:56px;height:200px;background:#fff;border:1px solid #333;border-radius:0 0 8px 8px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px;color:#555;font-size:12px;cursor:pointer;transition:background .08s}.k:active{background:#ddd}</style></head><body><h1>🎹 Mini Piano</h1><p>Click the keys — C major scale</p><div id="keys"></div><script>\nvar notes=[[261.6,"C"],[293.7,"D"],[329.6,"E"],[349.2,"F"],[392,"G"],[440,"A"],[493.9,"B"],[523.3,"C"]];var ctx=new (window.AudioContext||window.webkitAudioContext)();var box=document.getElementById("keys");\nnotes.forEach(function(n){var d=document.createElement("div");d.className="k";d.textContent=n[1];d.onmousedown=function(){var o=ctx.createOscillator(),g=ctx.createGain();o.frequency.value=n[0];o.type="triangle";g.gain.setValueAtTime(0.4,ctx.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.8);o.connect(g);g.connect(ctx.destination);o.start();o.stop(ctx.currentTime+0.85);};box.appendChild(d);});\n<\/script></body></html>',
+  dvd: '<!DOCTYPE html><html><head><style>body{margin:0;background:#000;overflow:hidden}#logo{position:absolute;font-family:Arial;font-weight:bold;font-size:26px;padding:12px 24px;border-radius:8px;color:#fff;user-select:none}</style></head><body><div id="logo">📀 CodeLab DVD</div><script>\nvar l=document.getElementById("logo"),x=50,y=50,vx=3,vy=3;\nfunction hue(){var h=Math.floor(Math.random()*360);l.style.background="hsl("+h+",80%,50%)";}\nhue();\nsetInterval(function(){var W=innerWidth-l.offsetWidth,H=innerHeight-l.offsetHeight;x+=vx;y+=vy;\nif(x<0||x>W){vx=-vx;hue();}if(y<0||y>H){vy=-vy;hue();}\nx=Math.max(0,Math.min(x,W));y=Math.max(0,Math.min(y,H));\nl.style.left=x+"px";l.style.top=y+"px";},16);\n<\/script></body></html>',
+  matrix: '<!DOCTYPE html><html><head><style>body{margin:0;background:#000;overflow:hidden}canvas{display:block}</style></head><body><canvas id="c"></canvas><script>\nvar c=document.getElementById("c"),x=c.getContext("2d");c.width=innerWidth;c.height=innerHeight;\nvar cols=Math.floor(c.width/16),y=[];for(var i=0;i<cols;i++)y[i]=Math.random()*c.height;\nvar chars="ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾊﾋﾌﾍﾎ01".split("");\nsetInterval(function(){x.fillStyle="rgba(0,0,0,0.08)";x.fillRect(0,0,c.width,c.height);x.font="16px monospace";\nfor(var i=0;i<cols;i++){x.fillStyle=Math.random()<0.1?"#d4ffdf":"#0f0";x.fillText(chars[Math.floor(Math.random()*chars.length)],i*16,y[i]);y[i]+=16;if(y[i]>c.height&&Math.random()>0.975)y[i]=0;}},50);\n<\/script></body></html>',
+  lava: '<!DOCTYPE html><html><head><style>body{margin:0;background:#12051f;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}.lamp{width:280px;height:460px;border-radius:140px 140px 40px 40px;background:linear-gradient(#1a0533,#2d0b4e);position:relative;overflow:hidden;box-shadow:0 0 80px #a326fa66, inset 0 0 40px #000}.blob{position:absolute;border-radius:50%;filter:blur(6px)}@keyframes rise{0%,100%{transform:translateY(220px) scale(0.8)}50%{transform:translateY(-140px) scale(1.1)}}</style></head><body><div class="lamp"><div class="blob" style="width:110px;height:110px;background:#ff2ec4;left:60px;top:180px;animation:rise 7s ease-in-out infinite"></div><div class="blob" style="width:80px;height:80px;background:#ff7a2e;left:130px;top:200px;animation:rise 9s ease-in-out infinite 1s"></div><div class="blob" style="width:60px;height:60px;background:#a326fa;left:90px;top:220px;animation:rise 11s ease-in-out infinite 2s"></div><div class="blob" style="width:95px;height:95px;background:#ff2e7e;left:40px;top:210px;animation:rise 8s ease-in-out infinite 3s"></div></div></body></html>',
+  racer: '<!DOCTYPE html><html><head><style>body{margin:0;font-family:monospace;background:#0d1117;color:#c9d1d9;display:flex;flex-direction:column;align-items:center;padding-top:60px}#sent{font-size:20px;margin:20px}#sent b{color:#58a6ff}input{font-size:18px;padding:10px;background:#161b22;border:1px solid #30363d;color:#fff;border-radius:6px;width:420px;outline:none}</style></head><body><h1>⌨️ Type Racer</h1><div id="sent"></div><input id="box" placeholder="Type here to start..." autofocus><div id="res" style="margin-top:14px;color:#89d185"></div><script>\nvar target="the quick brown fox jumps over the lazy dog while the codelab foxes remix games";\ndocument.getElementById("sent").innerHTML="<b>"+target+"</b>";var box=document.getElementById("box"),t0=null,done=false;\nbox.oninput=function(){if(!t0)t0=Date.now();var v=box.value;\nif(target.startsWith(v)){document.getElementById("sent").innerHTML="<b>"+v+"</b>"+target.slice(v.length);}else{box.style.borderColor="#f85149";return;}\nbox.style.borderColor="#30363d";\nif(v===target&&!done){done=true;var sec=(Date.now()-t0)/1000,wpm=Math.round(target.split(" ").length/(sec/60));document.getElementById("res").textContent="🎉 "+sec.toFixed(1)+"s — "+wpm+" WPM";console.log("Your speed: "+wpm+" WPM");}};\n<\/script></body></html>',
+  blockycat: '<!DOCTYPE html><html><head><style>body{margin:0;background:#9ce3f5;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:system-ui}canvas{background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.15)}p{color:#1a365d;font-weight:bold}</style></head><body><canvas id="c" width="480" height="360"></canvas><p>Use arrow keys to catch the mouse! 🐱➡️🐭</p><script>\nvar c=document.getElementById("c"),x=c.getContext("2d");var cat={x:40,y:40},mouse={x:380,y:280},score=0;\ndocument.addEventListener("keydown",function(e){if(e.key==="ArrowUp")cat.y-=20;if(e.key==="ArrowDown")cat.y+=20;if(e.key==="ArrowLeft")cat.x-=20;if(e.key==="ArrowRight")cat.x+=20;cat.x=Math.max(0,Math.min(440,cat.x));cat.y=Math.max(0,Math.min(320,cat.y));if(Math.abs(cat.x-mouse.x)<25&&Math.abs(cat.y-mouse.y)<25){score++;mouse={x:Math.random()*420+10,y:Math.random()*300+10};console.log("Caught! Score: "+score);}});\nsetInterval(function(){x.fillStyle="#9ce3f5";x.fillRect(0,0,480,360);x.font="40px serif";x.fillText("🐱",cat.x,cat.y+30);x.fillText("🐭",mouse.x,mouse.y+30);x.fillStyle="#333";x.font="16px system-ui";x.fillText("Score: "+score,10,25);},30);\n<\/script></body></html>'
+};
+
+const social = {
+  state: null,
+  SS_KEY: 'codelab_social_v1',
+  feedCat: 'All',
+  feedQuery: '',
+  watchId: null,
+  storeTab: 'store',
+  carouselIdx: 0,
+  cmdSel: 0,
+
+  ach: [
+    { id: 'newbie',        icon: '🌱', name: 'Newcomer',           desc: 'Create a brand new project',          xp: 20 },
+    { id: 'first_publish', icon: '🚀', name: 'Liftoff',            desc: 'Publish a project to the cloud',      xp: 30 },
+    { id: 'publisher5',    icon: '🌟', name: 'Prolific Publisher', desc: 'Publish 5 projects',                  xp: 60 },
+    { id: 'remixer',       icon: '🔧', name: 'Remixer',            desc: 'Remix a community project',           xp: 20 },
+    { id: 'collector',     icon: '📦', name: 'Collector',          desc: 'Add 3 projects to your library',      xp: 40 },
+    { id: 'wishful',       icon: '💛', name: 'Wishful Thinker',    desc: 'Wishlist something in the Store',     xp: 10 },
+    { id: 'enthusiast',    icon: '❤️', name: 'Enthusiast',         desc: 'Like 3 community projects',           xp: 15 },
+    { id: 'social',        icon: '💬', name: 'Chatty',             desc: 'Leave a comment on a project',        xp: 15 },
+    { id: 'scholar',       icon: '🎓', name: 'Scholar',            desc: 'Step through a tutorial',             xp: 20 },
+    { id: 'customizer',    icon: '🧩', name: 'Customizer',         desc: 'Install an extension',                xp: 15 },
+    { id: 'palette',       icon: '⌨️', name: 'Power User',         desc: 'Open the Command Palette',            xp: 10 },
+    { id: 'level3',        icon: '🏆', name: 'Level 3 Legend',     desc: 'Reach Level 3',                       xp: 0 }
+  ],
+
+  commands: [
+    { name: 'New Project',            hint: 'Create a fresh project',            run: () => app.newProject() },
+    { name: 'New File',               hint: 'Add a file to the current project', run: () => app.promptAddFile() },
+    { name: 'Run Code',               hint: 'Refresh the live preview (Ctrl+S)', run: () => app.runCode() },
+    { name: 'Publish to Supabase',    hint: 'Share your project to the cloud',   run: () => app.publishToSupabase() },
+    { name: 'Save Workspace',         hint: 'Save projects locally',             run: () => app.saveProject() },
+    { name: 'Open Community Feed',    hint: 'Browse & remix projects',           run: () => social.openFeed() },
+    { name: 'Open Project Store',     hint: 'Discover templates & games',        run: () => social.openStore() },
+    { name: 'Show Tutorials',         hint: 'Scratch-style guided videos',       run: () => app.showTutorials() },
+    { name: 'My Achievements',        hint: 'View badges & XP',                  run: () => social.openProfile() },
+    { name: 'Format Document',        hint: 'Prettier — tidy the current file',  run: () => app.formatDoc() },
+    { name: 'AI: Explain this file',  hint: 'Ask the AI Assistant',              run: () => { app.switchSidebar('ai'); app.aiSend('Explain what this code does, briefly.'); } },
+    { name: 'Configure Integrations', hint: 'Supabase / Firebase cloud settings', run: () => app.switchSidebar('integrations') },
+    { name: 'Open Cloud Console',     hint: 'Edit Supabase & Firebase data live',  run: () => cloud.open() }
+  ],
+
+  items: [
+    { id: 'neon-snake',     title: 'Neon Snake',                  creator: 'PixelPete',  color: '#3ddc84', emoji: '🐍', grad: ['#0b3d0b', '#1f6f2e'], cat: 'Games',     tags: ['arcade', 'canvas', 'retro'],    views: 48210, likes: 3210, age: '2 days ago',  dur: '2:14', rating: 4.9, desc: 'A glowing snake game with wrap-around walls and a live score. Remix it to add levels, speed ramps or a two-player mode!',        files: [{ name: 'index.html', language: 'html', content: SNIP.snake }] },
+    { id: 'cookie-clicker', title: 'Cookie Clicker Lite',         creator: 'IdleIvy',    color: '#c8871e', emoji: '🍪', grad: ['#3b2305', '#7a4a10'], cat: 'Games',     tags: ['idle', 'clicker'],              views: 91240, likes: 5402, age: '5 hours ago', dur: '4:03', rating: 4.7, desc: 'The classic idle game in 30 lines. Remix it with golden cookies, upgrade trees and combo multipliers!',                          files: [{ name: 'index.html', language: 'html', content: SNIP.cookie }] },
+    { id: 'starfield',      title: 'Starfield Warp',              creator: 'CanvasCarl', color: '#58a6ff', emoji: '🌌', grad: ['#02021e', '#151566'], cat: 'Generative', tags: ['space', '3d', 'hypnotic'],      views: 33980, likes: 2871, age: '1 week ago',  dur: '1:48', rating: 4.8, desc: 'A pure-canvas hyperjump effect with 400 stars. Remix it to change warp speed, star colors or add a nebula!',                     files: [{ name: 'index.html', language: 'html', content: SNIP.starfield }] },
+    { id: 'fireworks',      title: 'Fireworks Canvas',            creator: 'CanvasCarl', color: '#58a6ff', emoji: '🎆', grad: ['#1c0533', '#5e0f6e'], cat: 'Generative', tags: ['particles', 'physics'],         views: 21870, likes: 1904, age: '3 days ago',  dur: '3:12', rating: 4.6, desc: 'Click anywhere to explode a firework with real physics. Remix it to add sound, gravity sliders or a grand finale button!',        files: [{ name: 'index.html', language: 'html', content: SNIP.fireworks }] },
+    { id: 'drum-pads',      title: 'Drum Pads 6x',                creator: 'SynthSara',  color: '#a371f7', emoji: '🥁', grad: ['#2b0b3d', '#5b1f8a'], cat: 'Music',     tags: ['webaudio', 'beats'],            views: 15730, likes: 1211, age: '4 days ago',  dur: '2:47', rating: 4.8, desc: 'Six synth drum pads playable by mouse or keys 1–6. Remix it to add a step sequencer, BPM control or record mode!',               files: [{ name: 'index.html', language: 'html', content: SNIP.drums }] },
+    { id: 'mini-piano',     title: 'Mini Piano',                  creator: 'SynthSara',  color: '#a371f7', emoji: '🎹', grad: ['#0b1e3d', '#1f4e8a'], cat: 'Music',     tags: ['webaudio', 'instrument'],       views: 12310, likes: 986,  age: '2 weeks ago', dur: '5:20', rating: 4.5, desc: 'A playable C-major piano built on the Web Audio API. Remix it to add black keys, a waveform picker and a song player!',           files: [{ name: 'index.html', language: 'html', content: SNIP.piano }] },
+    { id: 'dvd-bounce',     title: 'DVD Bounce',                  creator: 'MotionMax',  color: '#f85149', emoji: '📀', grad: ['#330505', '#7a1a1a'], cat: 'Animation', tags: ['meme', 'physics'],              views: 66420, likes: 4870, age: '6 days ago',  dur: '0:58', rating: 4.4, desc: 'The legendary DVD screensaver. Remix it to add a corner-hit counter (it will never hit the corner), trails or more logos!',        files: [{ name: 'index.html', language: 'html', content: SNIP.dvd }] },
+    { id: 'matrix-rain',    title: 'Matrix Rain',                 creator: 'MotionMax',  color: '#f85149', emoji: '💚', grad: ['#01180b', '#05512b'], cat: 'Animation', tags: ['hacker', 'retro'],              views: 54330, likes: 4102, age: '1 day ago',   dur: '1:36', rating: 4.9, desc: 'Wake up, coder... green digital rain with authentic katakana glyphs. Remix it to change the speed, palette or message!',           files: [{ name: 'index.html', language: 'html', content: SNIP.matrix }] },
+    { id: 'lava-lamp',      title: 'Neon Lava Lamp (Pure CSS)',   creator: 'CssCelia',   color: '#e34c86', emoji: '🧪', grad: ['#2d0b4e', '#7a1fa8'], cat: 'Animation', tags: ['css-only', 'aesthetic'],        views: 8930,  likes: 742,  age: '3 days ago',  dur: '6:44', rating: 4.7, desc: 'Zero JavaScript — just pure CSS blobs rising and falling. Remix it to swap colors, add blur or build a whole retro room!',        files: [{ name: 'index.html', language: 'html', content: SNIP.lava }] },
+    { id: 'type-racer',     title: 'Type Racer',                  creator: 'ToolTom',    color: '#89d185', emoji: '⌨️', grad: ['#0d1117', '#1f3a5f'], cat: 'Tools',     tags: ['typing', 'challenge'],          views: 7810,  likes: 610,  age: '8 hours ago', dur: '2:05', rating: 4.3, desc: 'Measure your WPM against the classic pangram. Remix it to add leaderboards, difficulty levels and a live accuracy meter!',        files: [{ name: 'index.html', language: 'html', content: SNIP.racer }] }
+  ],
+
+  init() {
+    try { this.state = JSON.parse(localStorage.getItem(this.SS_KEY)); } catch (e) { this.state = null; }
+    if (!this.state) this.state = { likes: {}, likesGiven: [], comments: {}, views: {}, wishlist: [], installed: [], follows: [], xp: 0, unlocked: [], pubCount: 0, published: [], remoteFeed: [] };
+    // Scratch Blocks Pack extension adds its starter project to the Store & Feed
+    if (app.isExtInstalled('scratch') && !this.items.some(i => i.id === 'scratch-cat')) {
+      this.items.unshift({ id: 'scratch-cat', title: 'Blocky Cat Chase (Scratch Starter)', creator: 'ScratchSam', color: '#4c97ff', emoji: '🐱', grad: ['#4c97ff', '#2b6cb0'], cat: 'Games', tags: ['scratch', 'beginner'], views: 3012, likes: 405, age: 'today', dur: '1:20', rating: 4.9, desc: 'The classic first Scratch project, remade in code: use the arrow keys to chase the mouse! The perfect remix starter for young coders.', files: [{ name: 'index.html', language: 'html', content: SNIP.blockycat }] });
+    }
+    this.renderPill();
+    this.fetchRemote();
+
+    document.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'P' || e.key === 'p')) {
+        e.preventDefault(); this.togglePalette(); return;
+      }
+      if (e.key === 'Escape') {
+        this.closePalette(); this.closeFeed(); this.closeStore();
+        const tut = document.getElementById('scratchTut'); if (tut) tut.style.display = 'none';
+      }
+    });
+  },
+
+  save() { localStorage.setItem(this.SS_KEY, JSON.stringify(this.state)); },
+  item(id) { return this.items.concat(this.publishedItems()).find(i => i.id === id); },
+
+  // ---------- COMMUNITY PUBLISHED PROJECTS (Supabase → feed) ----------
+  publishedItems() {
+    const local = this.state.published || [];
+    const remote = this.state.remoteFeed || [];
+    const seen = new Set(local.map(p => p.id));
+    return local.concat(remote.filter(r => !seen.has(r.id)));
+  },
+
+  addPublished(row) {
+    if (!row) return;
+    const files = (row.files || []).map(f => ({ name: f.name, language: f.language, content: f.content }));
+    if (!files.length) return;
+    const item = {
+      id: 'pub_' + row.id,
+      title: row.title || 'Untitled Project',
+      creator: 'You', color: '#58a6ff',
+      emoji: this.pickEmoji(row), grad: this.hashGrad(row),
+      cat: 'Community', tags: ['your project'],
+      views: 0, likes: 0, age: 'just now', dur: 'live', rating: 0,
+      desc: 'Published from your editor to the CodeLab cloud — live in the CodeTube feed for everyone to see, like and remix!',
+      files: files
+    };
+    this.state.published = [item].concat(this.state.published || []).slice(0, 30);
+    this.save();
+    app.showToast('📡 Your project is now live in the CodeTube feed!', 'success');
+  },
+
+  async fetchRemote() {
+    try {
+      const cfg = app.supaConfig();
+      const res = await fetch(cfg.url + '/rest/v1/projects?select=id,title,files&order=id.desc&limit=15', {
+        headers: { 'apikey': cfg.key }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const rows = await res.json();
+      this.state.remoteFeed = rows.map(r => ({
+        id: 'pub_' + r.id,
+        title: r.title || 'Untitled Project',
+        creator: 'CodeLab Coder', color: '#a371f7',
+        emoji: this.pickEmoji(r), grad: this.hashGrad(r),
+        cat: 'Community', tags: ['community'],
+        views: 0, likes: 0, age: 'recently', dur: 'live', rating: 0,
+        desc: 'A live project published to CodeLab by a community member. See inside and remix it in your editor!',
+        files: (r.files || []).map(f => ({ name: f.name, language: f.language, content: f.content }))
+      })).filter(i => i.files.length);
+      this.save();
+      const page = document.getElementById('feedPage');
+      if (page && page.style.display !== 'none' && !this.watchId) this.renderFeed();
+    } catch (e) {
+      console.warn('Community feed fetch failed (offline?):', e.message);
+    }
+  },
+
+  pickEmoji(row) {
+    const t = ((row.title || '') + ' ' + JSON.stringify(row.files || [])).toLowerCase();
+    const pairs = [['snake', '🐍'], ['cookie', '🍪'], ['piano', '🎹'], ['drum', '🥁'], ['game', '🎮'], ['music', '🎵'], ['synth', '🎵'], ['art', '🎨'], ['clock', '⏰'], ['weather', '⛅'], ['todo', '✅'], ['chat', '💬'], ['calc', '🧮'], ['paint', '🖌️']];
+    for (const p of pairs) { if (t.includes(p[0])) return p[1]; }
+    return '📦';
+  },
+
+  hashGrad(row) {
+    const grads = [['#0b3d0b', '#1f6f2e'], ['#2b0b3d', '#5b1f8a'], ['#0b1e3d', '#1f4e8a'], ['#330505', '#7a1a1a'], ['#3b2305', '#7a4a10'], ['#0d1117', '#1f3a5f']];
+    let h = 0; const s = String(row.id || '') + (row.title || '');
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return grads[h % grads.length];
+  },
+
+  // ---------- XP / ACHIEVEMENTS ----------
+  level() { return 1 + Math.floor(this.state.xp / 100); },
+
+  renderPill() {
+    const el = document.getElementById('xpPill'); if (!el) return;
+    const lvl = this.level(), into = this.state.xp % 100;
+    el.innerHTML = '<span class="xp-lvl">⚡ Lv.' + lvl + '</span>' +
+      '<div class="xp-bar"><div style="width:' + into + '%"></div></div>' +
+      '<span class="xp-count">' + this.state.xp + ' XP</span>';
+    el.title = 'Level ' + lvl + ' — click to view achievements';
+  },
+
+  addXp(n) {
+    if (!n) return;
+    const before = this.level();
+    this.state.xp += n; this.save(); this.renderPill();
+    const after = this.level();
+    if (after > before) app.showToast('🎊 Level up! You are now Level ' + after, 'success');
+    if (after >= 3) this.unlock('level3');
+  },
+
+  unlock(id) {
+    if (this.state.unlocked.includes(id)) return;
+    const a = this.ach.find(x => x.id === id); if (!a) return;
+    this.state.unlocked.push(id); this.save();
+    app.showToast('🏆 Achievement unlocked — ' + a.name + ' (+' + a.xp + ' XP)', 'success');
+    this.addXp(a.xp);
+  },
+
+  onPublish() {
+    this.state.pubCount = (this.state.pubCount || 0) + 1; this.save();
+    this.unlock('first_publish'); this.addXp(20);
+    if (this.state.pubCount >= 5) this.unlock('publisher5');
+  },
+
+  onInstallExtension() { this.unlock('customizer'); this.addXp(10); },
+
+  openProfile() { this.openStore(); this.storeTab = 'achievements'; this.renderStore(); },
+
+  // ---------- COMMUNITY FEED (CodeTube) ----------
+  openFeed() { this.watchId = null; document.getElementById('feedPage').style.display = 'flex'; this.renderFeed(); this.fetchRemote(); },
+  closeFeed() { document.getElementById('feedPage').style.display = 'none'; },
+  setCat(c) { this.feedCat = c; this.renderFeed(); },
+
+  fmtViews(v) { return v >= 1000 ? (v / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : String(v); },
+
+  filteredFeed() {
+    return this.publishedItems().concat(this.items).filter(i =>
+      (this.feedCat === 'All' || i.cat === this.feedCat) &&
+      (!this.feedQuery || i.title.toLowerCase().includes(this.feedQuery) || i.creator.toLowerCase().includes(this.feedQuery))
+    );
+  },
+
+  renderFeed() {
+    const body = document.getElementById('feedBody');
+    if (this.watchId) { this.renderWatch(); return; }
+    const cats = ['All', 'Community', 'Games', 'Music', 'Generative', 'Animation', 'Tools'];
+    const list = this.filteredFeed();
+    const hero = this.items[0];
+    body.innerHTML =
+      '<div class="feed-hero" onclick="social.openWatch(\'' + hero.id + '\')">' +
+        '<div class="feed-hero-thumb" style="background:linear-gradient(135deg,' + hero.grad[0] + ',' + hero.grad[1] + ')">' +
+          '<div class="live-embed" data-item="' + hero.id + '"></div><span class="feed-emoji">' + hero.emoji + '</span></div>' +
+        '<div><div class="feed-hero-tag">🔥 #1 trending on CodeLab</div>' +
+        '<div class="feed-hero-title">' + hero.title + '</div>' +
+        '<div class="feed-hero-desc">' + hero.desc + '</div>' +
+        '<button class="btn btn-accent">▶ Watch now</button></div>' +
+      '</div>' +
+      '<div class="feed-chips">' + cats.map(c => '<span class="feed-chip ' + (c === this.feedCat ? 'active' : '') + '" onclick="social.setCat(\'' + c + '\')">' + c + '</span>').join('') + '</div>' +
+      '<div class="feed-grid">' + list.map(i => this.cardHTML(i)).join('') + '</div>' +
+      (list.length ? '' : '<div class="feed-empty">No projects found 😢 Try another search.</div>');
+    this.mountLiveThumbs();
+  },
+
+  cardHTML(i) {
+    const views = i.views + (this.state.views[i.id] || 0);
+    const likes = i.likes + (this.state.likes[i.id] || 0);
+    return '<div class="feed-card" onclick="social.openWatch(\'' + i.id + '\')">' +
+      '<div class="feed-thumb" style="background:linear-gradient(135deg,' + i.grad[0] + ',' + i.grad[1] + ')">' +
+        '<span class="feed-emoji">' + i.emoji + '</span>' +
+        '<div class="live-embed" data-item="' + i.id + '"></div>' +
+        '<span class="feed-dur">▶ ' + i.dur + '</span></div>' +
+      '<div class="feed-meta"><div class="feed-avatar" style="background:' + i.color + '">' + i.creator[0] + '</div>' +
+      '<div><div class="feed-title">' + i.title + '</div>' +
+      '<div class="feed-sub">@' + i.creator + ' • ' + this.fmtViews(views) + ' views • ' + i.age + '</div>' +
+      '<div class="feed-sub">' + i.cat + ' • ❤ ' + this.fmtViews(likes) + (i.rating ? ' • ★ ' + i.rating : ' • 🆕 NEW') + '</div></div></div></div>';
+  },
+
+  openWatch(id) {
+    this.watchId = id;
+    this.state.views[id] = (this.state.views[id] || 0) + 1; this.save();
+    this.renderFeed();
+    const body = document.getElementById('feedBody'); if (body) body.scrollTop = 0;
+  },
+
+  backToFeed() { this.watchId = null; this.renderFeed(); },
+
+  // ---------- LIVE THUMBNAILS (lazy iframe previews) ----------
+  mountLiveThumbs() {
+    if (this._thumbObserver) this._thumbObserver.disconnect();
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (!en.isIntersecting) return;
+        const el = en.target;
+        obs.unobserve(el);
+        const item = this.item(el.dataset.item);
+        if (!item || !item.files[0]) return;
+        const frame = document.createElement('iframe');
+        frame.setAttribute('sandbox', 'allow-scripts allow-modals');
+        frame.srcdoc = item.files[0].content;
+        el.appendChild(frame);
+        const w = el.clientWidth || 250;
+        frame.style.transform = 'scale(' + (w / 800) + ')';
+        const em = el.parentElement.querySelector('.feed-emoji, .store-emoji');
+        if (em) em.style.opacity = '0';
+        el.classList.add('loaded');
+      });
+    }, { rootMargin: '250px' });
+    this._thumbObserver = obs;
+    document.querySelectorAll('.live-embed:not(.loaded)').forEach(el => obs.observe(el));
+  },
+
+  renderWatch() {
+    const i = this.item(this.watchId); if (!i) { this.backToFeed(); return; }
+    const liked = this.state.likesGiven.includes(i.id);
+    const following = this.state.follows.includes(i.creator);
+    const views = i.views + (this.state.views[i.id] || 0);
+    const likes = i.likes + (this.state.likes[i.id] || 0);
+    const comments = this.state.comments[i.id] || [];
+    const related = this.items.filter(x => x.id !== i.id).slice(0, 6);
+    const body = document.getElementById('feedBody');
+    body.innerHTML =
+      '<div class="watch-top"><button class="btn" onclick="social.backToFeed()">← Back to feed</button></div>' +
+      '<div class="watch-wrap"><div class="watch-main">' +
+        '<div class="watch-player" id="watchPlayer"></div>' +
+        '<div class="watch-title">' + i.title + '</div>' +
+        '<div class="watch-meta">' +
+          '<div class="feed-avatar big" style="background:' + i.color + '">' + i.creator[0] + '</div>' +
+          '<div class="watch-creator"><b>@' + i.creator + '</b><span>' + this.fmtViews(views) + ' views • ' + i.age + '</span></div>' +
+          '<button class="btn ' + (liked ? 'btn-liked' : '') + '" onclick="social.likePost(\'' + i.id + '\')">' + (liked ? '❤ Liked' : '🤍 Like') + ' · ' + this.fmtViews(likes) + '</button>' +
+          '<button class="btn" onclick="social.follow(\'' + i.creator + '\')">' + (following ? '✓ Following' : '+ Follow') + '</button>' +
+          '<button class="btn btn-accent" onclick="social.remix(\'' + i.id + '\')">🔧 Remix (See inside)</button>' +
+        '</div>' +
+        '<div class="watch-desc">' + i.desc + '</div>' +
+        '<div class="watch-comments"><h4>' + comments.length + ' Comments</h4>' +
+          '<div class="comment-row"><div class="feed-avatar" style="background:#58a6ff">Y</div>' +
+          '<input id="commentInput" placeholder="Add a comment..." onkeydown="if(event.key===\'Enter\')social.postComment(\'' + i.id + '\')">' +
+          '<button class="btn btn-accent" onclick="social.postComment(\'' + i.id + '\')">Post</button></div>' +
+          comments.map(c => '<div class="comment-row"><div class="feed-avatar" style="background:' + c.color + '">' + c.name[0] + '</div>' +
+            '<div><b>' + c.name + '</b> <span class="feed-sub">' + c.t + '</span><div>' + c.text + '</div></div></div>').join('') +
+        '</div>' +
+      '</div><div class="watch-side"><h4>Up next</h4>' +
+        related.map(r => '<div class="watch-rel" onclick="social.openWatch(\'' + r.id + '\')">' +
+          '<div class="feed-thumb small" style="background:linear-gradient(135deg,' + r.grad[0] + ',' + r.grad[1] + ')">' + r.emoji + '</div>' +
+          '<div><div class="feed-title" style="font-size:13px">' + r.title + '</div><div class="feed-sub">@' + r.creator + ' • ' + this.fmtViews(r.views) + ' views</div></div></div>').join('') +
+      '</div></div>';
+    const player = document.getElementById('watchPlayer');
+    const frame = document.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-scripts allow-modals');
+    frame.srcdoc = i.files[0].content;
+    player.appendChild(frame);
+  },
+
+  likePost(id) {
+    if (this.state.likesGiven.includes(id)) {
+      this.state.likesGiven = this.state.likesGiven.filter(x => x !== id);
+      this.state.likes[id] = 0;
+    } else {
+      this.state.likesGiven.push(id); this.state.likes[id] = 1; this.addXp(2);
+      if (this.state.likesGiven.length >= 3) this.unlock('enthusiast');
+    }
+    this.save(); this.renderWatch();
+  },
+
+  postComment(id) {
+    const input = document.getElementById('commentInput');
+    const t = (input.value || '').trim(); if (!t) return;
+    (this.state.comments[id] = this.state.comments[id] || []).push({ name: 'You', color: '#58a6ff', t: 'just now', text: t });
+    input.value = ''; this.save();
+    this.unlock('social'); this.addXp(5); this.renderWatch();
+  },
+
+  follow(creator) {
+    const f = this.state.follows;
+    if (f.includes(creator)) { this.state.follows = f.filter(x => x !== creator); app.showToast('Unfollowed @' + creator); }
+    else { f.push(creator); app.showToast('You are now following @' + creator + ' 🎉', 'success'); }
+    this.save(); this.renderWatch();
+  },
+
+  // ---------- SCRATCH-STYLE REMIX ----------
+  createFromItem(id, prefix) {
+    const i = this.item(id); if (!i) return;
+    const proj = { id: 'pen_' + Date.now(), title: prefix + i.title, activeFile: 'index.html', files: i.files.map(f => ({ name: f.name, language: f.language, content: f.content })) };
+    app.projects.push(proj);
+    app.currentProject = proj;
+    app.persist();
+    app.renderFileTree(); app.renderTabs(); app.loadActiveFile();
+    return i;
+  },
+
+  remix(id) {
+    const i = this.createFromItem(id, 'Remix of ');
+    this.closeFeed();
+    this.addXp(15); this.unlock('remixer');
+    app.showToast('🔧 Remixed "' + i.title + '" — it is now open in your editor!', 'success');
+  },
+
+  // ---------- STORE (Steam-style) ----------
+  openStore() { document.getElementById('storePage').style.display = 'flex'; this.renderStore(); },
+  closeStore() { document.getElementById('storePage').style.display = 'none'; },
+  setStoreTab(t) { this.storeTab = t; this.renderStore(); },
+  carMove(d) { this.carouselIdx = (this.carouselIdx + d + 3) % 3; this.renderStore(); },
+  carSet(i) { this.carouselIdx = i; this.renderStore(); },
+
+  renderStore() {
+    const body = document.getElementById('storeBody');
+    document.querySelectorAll('.store-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === this.storeTab));
+    if (this.storeTab === 'store') {
+      const heroes = [this.item('neon-snake'), this.item('starfield'), this.item('drum-pads')];
+      const pop = [...this.items].sort((a, b) => b.views - a.views).slice(0, 6);
+      const fresh = this.items.slice(-4).reverse();
+      const music = this.items.filter(i => i.cat === 'Music');
+      body.innerHTML =
+        '<div class="store-carousel">' +
+          '<button class="car-arrow left" onclick="social.carMove(-1)">‹</button>' +
+          heroes.map((h, ix) => '<div class="car-card ' + (ix === this.carouselIdx ? 'on' : '') + '" onclick="social.installItem(\'' + h.id + '\')" style="background:linear-gradient(135deg,' + h.grad[0] + ',' + h.grad[1] + ')">' +
+            '<span class="car-emoji">' + h.emoji + '</span>' +
+            '<div class="car-info"><div class="car-title">' + h.title + '</div><div class="car-desc">' + h.desc + '</div><div class="car-price">FREE — Install &amp; Remix</div></div></div>').join('') +
+          '<button class="car-arrow right" onclick="social.carMove(1)">›</button>' +
+          '<div class="car-dots">' + heroes.map((_, ix) => '<span class="car-dot ' + (ix === this.carouselIdx ? 'on' : '') + '" onclick="social.carSet(' + ix + ')"></span>').join('') + '</div>' +
+        '</div>' +
+        this.storeRow('🔥 Popular right now', pop) +
+        this.storeRow('✨ Fresh drops', fresh) +
+        this.storeRow('🎹 Made for music makers', music);
+      this.mountLiveThumbs();
+    } else if (this.storeTab === 'library') {
+      body.innerHTML = this.renderLibrary();
+    } else {
+      body.innerHTML = this.renderAch();
+    }
+  },
+
+  storeRow(title, list) {
+    return '<div class="store-section"><h3>' + title + '</h3><div class="store-grid">' + list.map(i => {
+      const wished = this.state.wishlist.includes(i.id);
+      return '<div class="store-card" onclick="social.installItem(\'' + i.id + '\')">' +
+        '<div class="store-thumb" style="background:linear-gradient(135deg,' + i.grad[0] + ',' + i.grad[1] + ')">' +
+          '<span class="store-emoji">' + i.emoji + '</span>' +
+          '<div class="live-embed" data-item="' + i.id + '"></div>' +
+          '<button class="wish" title="Wishlist" onclick="event.stopPropagation();social.wish(\'' + i.id + '\')">' + (wished ? '💛' : '🤍') + '</button></div>' +
+        '<div class="store-card-info"><div class="store-card-title">' + i.title + '</div>' +
+        '<div class="store-tags">' + i.tags.map(t => '<span>' + t + '</span>').join('') + '</div>' +
+        '<div class="store-card-foot"><span class="store-price">FREE</span><span class="store-rating">★ ' + i.rating + '</span></div></div></div>';
+    }).join('') + '</div></div>';
+  },
+
+  renderLibrary() {
+    const inst = this.items.filter(i => this.state.installed.includes(i.id));
+    if (!inst.length) return '<div class="store-section" style="padding-top:60px;text-align:center"><h3 style="font-size:22px">📚 Your library is empty</h3><p style="color:#8f98a0">Install projects from the Store tab — they open straight in your editor, ready to remix.</p></div>';
+    return '<div class="store-section"><h3>📚 Your Library (' + inst.length + ')</h3><div class="store-grid">' + inst.map(i =>
+      '<div class="store-card" onclick="social.installItem(\'' + i.id + '\')">' +
+      '<div class="store-thumb" style="background:linear-gradient(135deg,' + i.grad[0] + ',' + i.grad[1] + ')"><span>' + i.emoji + '</span></div>' +
+      '<div class="store-card-info"><div class="store-card-title">' + i.title + '</div>' +
+      '<div class="store-tags">' + i.tags.map(t => '<span>' + t + '</span>').join('') + '</div>' +
+      '<div class="store-card-foot"><span class="store-price">Installed ✓</span><span class="store-rating">★ ' + i.rating + '</span></div></div></div>').join('') + '</div></div>';
+  },
+
+  renderAch() {
+    const lvl = this.level(), into = this.state.xp % 100, u = this.state.unlocked.length;
+    return '<div class="ach-hero"><div style="display:flex;align-items:center;gap:14px"><div style="font-size:40px">⚡</div><div>' +
+      '<div style="font-size:20px;font-weight:bold">Level ' + lvl + ' Coder</div>' +
+      '<div style="color:#8f98a0;font-size:13px">' + u + ' / ' + this.ach.length + ' achievements unlocked • ' + this.state.xp + ' XP total</div></div></div>' +
+      '<div class="xp-bar big"><div style="width:' + into + '%"></div></div></div>' +
+      '<div class="ach-grid">' + this.ach.map(a => {
+        const un = this.state.unlocked.includes(a.id);
+        return '<div class="ach-card ' + (un ? 'unlocked' : '') + '"><div class="ach-icon">' + (un ? a.icon : '🔒') + '</div><div><div class="ach-name">' + a.name + '</div><div class="ach-desc">' + a.desc + '</div><div class="ach-xp">+' + a.xp + ' XP</div></div></div>';
+      }).join('') + '</div>';
+  },
+
+  wish(id) {
+    const w = this.state.wishlist;
+    if (w.includes(id)) { this.state.wishlist = w.filter(x => x !== id); app.showToast('Removed from wishlist'); }
+    else { w.push(id); this.unlock('wishful'); this.addXp(5); app.showToast('💛 Added to your wishlist!', 'success'); }
+    this.save(); this.renderStore();
+  },
+
+  installItem(id) {
+    const i = this.createFromItem(id, '');
+    if (!this.state.installed.includes(id)) {
+      this.state.installed.push(id); this.save();
+      if (this.state.installed.length >= 3) this.unlock('collector');
+    }
+    this.closeStore();
+    this.addXp(10);
+    app.showToast('📦 "' + i.title + '" added to your library and opened in the editor!', 'success');
+  },
+
+  // ---------- COMMAND PALETTE ----------
+  togglePalette() {
+    const ov = document.getElementById('cmdOverlay');
+    if (ov.style.display === 'flex') { this.closePalette(); return; }
+    ov.style.display = 'flex';
+    const inp = document.getElementById('cmdInput');
+    inp.value = ''; this.cmdSel = 0; this.renderCmdList();
+    setTimeout(() => inp.focus(), 50);
+    this.unlock('palette');
+  },
+
+  closePalette() { document.getElementById('cmdOverlay').style.display = 'none'; },
+
+  filteredCmds() {
+    const q = (document.getElementById('cmdInput').value || '').toLowerCase();
+    return this.commands.filter(c => c.name.toLowerCase().includes(q) || c.hint.toLowerCase().includes(q));
+  },
+
+  renderCmdList() {
+    const l = document.getElementById('cmdList');
+    const f = this.filteredCmds();
+    l.innerHTML = f.length
+      ? f.map((c, i) => '<div class="cmd-item ' + (i === this.cmdSel ? 'sel' : '') + '" onmouseover="social.cmdSel=' + i + '" onclick="social.runCmd(' + i + ')"><b>' + c.name + '</b><span>' + c.hint + '</span></div>').join('')
+      : '<div class="cmd-item"><b>No matching commands</b></div>';
+  },
+
+  runCmd(i) {
+    const f = this.filteredCmds();
+    const c = f[i];
+    this.closePalette();
+    if (c) c.run();
+  },
+
+  cmdKey(e) {
+    if (e.key === 'Enter') { e.preventDefault(); this.runCmd(this.cmdSel); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); const n = this.filteredCmds().length; this.cmdSel = Math.min(this.cmdSel + 1, n - 1); this.renderCmdList(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); this.cmdSel = Math.max(this.cmdSel - 1, 0); this.renderCmdList(); }
+  }
+};
+
+// ============================================================
+// Cloud Console — embedded dashboards + real data editors for
+// Supabase (PostgREST) and Firebase (RTDB & Firestore REST).
+// Everything talks to the cloud APIs straight from the browser,
+// so it works on any static host.
+// ============================================================
+const cloud = {
+  tab: 'supabase',
+  ftab: 'rtdb',
+  embedUrl: null,
+  sbTable: null,
+  sbDefs: null,
+  sbRows: null,
+  sbCols: [],
+  sbPk: 'id',
+  rtdbPath: '',
+  rtdbKeys: [],
+  rtdbData: undefined,
+  rtdbIsFolder: true,
+  fsPath: '',
+  fsDocs: null,
+  fsDocEdit: null,
+
+  open() { document.getElementById('cloudPage').style.display = 'flex'; this.render(); },
+  close() { document.getElementById('cloudPage').style.display = 'none'; },
+  setTab(t) { this.tab = t; this.embedUrl = null; this.render(); },
+  setFtab(t) { this.ftab = t; this.render(); },
+
+  esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); },
+
+  render() {
+    document.querySelectorAll('#cloudPage .cloud-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === this.tab));
+    const body = document.getElementById('cloudBody');
+    if (this.embedUrl) {
+      body.innerHTML = '<div style="height:calc(100vh - 130px); display:flex; flex-direction:column">' +
+        '<div style="display:flex; gap:8px; align-items:center; margin-bottom:8px">' +
+        '<button class="btn-c" onclick="cloud.embedUrl=null;cloud.render()">← Back to editors</button>' +
+        '<span style="color:#8f98a0;font-size:11px">⚠️ If this stays blank, the provider blocks iframe embedding (X-Frame-Options). Use ↗ Dashboard instead — the data editors below always work on static hosting.</span></div>' +
+        '<iframe class="embed-frame" src="' + this.embedUrl + '"></iframe></div>';
+      return;
+    }
+    body.innerHTML = this.tab === 'supabase' ? this.renderSupabase() : this.renderFirebase();
+  },
+
+  // ================= SUPABASE =================
+  embed(provider) {
+    this.embedUrl = provider === 'supabase'
+      ? 'https://supabase.com/dashboard/project/' + ((app.supaConfig().url || '').replace(/^https:\/\//, '').split('.')[0] || '')
+      : 'https://console.firebase.google.com/u/0/project/' + (localStorage.getItem('codelab_firestore_pid') || '');
+    this.render();
+  },
+
+  renderSupabase() {
+    const cfg = app.supaConfig();
+    let html = '<div class="cfg-card"><h4>⚡ Supabase connection</h4>' +
+      '<p>Edit your tables & rows right here — it talks to Supabase PostgREST directly, so it works from any static site. Publishable key = what your RLS allows; service_role key = full access (keep it safe).</p>' +
+      '<input id="cUrl" placeholder="https://xxx.supabase.co" value="' + cfg.url + '">' +
+      '<input id="cKey" type="password" placeholder="API key" value="' + cfg.key + '">' +
+      '<div class="integ-row" style="margin-top:6px">' +
+      '<button class="btn-c" onclick="cloud.saveCfg()">💾 Save</button>' +
+      '<button class="btn-c" onclick="cloud.loadTables()">🔄 Load tables</button>' +
+      '<button class="btn-c" onclick="cloud.embed(' + "'supabase'" + ')">🖥️ Embed console</button>' +
+      '<button class="btn-c" onclick="window.open(\'https://supabase.com/dashboard\',\'_blank\')">↗ Dashboard</button></div></div>';
+    if (this.sbTable) {
+      html += '<div class="crumb"><span onclick="cloud.sbTable=null;cloud.render()">tables</span> / <b>' + this.esc(this.sbTable) + '</b>' +
+        ' <button class="mini-btn" style="margin-left:8px" onclick="cloud.addRow()">+ Row</button>' +
+        ' <button class="mini-btn" onclick="cloud.openTable(cloud.sbTable)">↻ Refresh</button></div>' +
+        this.rowsGrid();
+    } else if (this.sbDefs) {
+      const tables = Object.keys(this.sbDefs);
+      html += '<h3 style="color:#fff;font-size:15px;margin:6px 0 10px">Tables (' + tables.length + ') — click to browse & edit rows</h3><div class="store-grid">' +
+        tables.map(t => '<div class="store-card" onclick="cloud.openTable(\'' + t + '\')">' +
+          '<div class="store-thumb" style="background:linear-gradient(135deg,#1e293b,#334155)"><span class="store-emoji">🗄️</span></div>' +
+          '<div class="store-card-info"><div class="store-card-title">' + this.esc(t) + '</div>' +
+          '<div class="store-tags"><span>' + Object.keys(this.sbDefs[t].properties || {}).length + ' columns</span></div></div></div>').join('') + '</div>';
+    } else {
+      html += '<p style="color:#8f98a0;font-size:12px">Press <b>🔄 Load tables</b> to browse your project\'s data.</p>';
+    }
+    return html;
+  },
+
+  saveCfg() {
+    const url = document.getElementById('cUrl').value.trim().replace(/\/+$/, '');
+    const key = document.getElementById('cKey').value.trim();
+    if (url) localStorage.setItem('codelab_supabase_url', url);
+    if (key) localStorage.setItem('codelab_supabase_key', key);
+    app.showToast('💾 Supabase connection saved', 'success');
+  },
+
+  async loadTables() {
+    this.saveCfg();
+    const cfg = app.supaConfig();
+    try {
+      const res = await fetch(cfg.url + '/rest/v1/', { headers: { 'apikey': cfg.key, 'Authorization': 'Bearer ' + cfg.key } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const spec = await res.json();
+      const defs = spec.definitions || (spec.components && spec.components.schemas) || {};
+      this.sbDefs = defs; this.sbTable = null; this.render();
+      if (!Object.keys(defs).length) app.showToast('Connected, but no tables are visible to this key (check RLS / expose settings)', 'info');
+      else app.showToast('✓ ' + Object.keys(defs).length + ' tables found', 'success');
+    } catch (e) {
+      app.showToast('Connection failed: ' + e.message, 'error');
+    }
+  },
+
+  async openTable(t) {
+    const cfg = app.supaConfig();
+    const def = (this.sbDefs && this.sbDefs[t]) || {};
+    this.sbCols = Object.keys(def.properties || {});
+    this.sbPk = this.sbCols.find(c => /Primary Key/i.test((def.properties[c] || {}).description || '')) || this.sbCols[0] || 'id';
+    try {
+      const res = await fetch(cfg.url + '/rest/v1/' + t + '?select=*&limit=100', { headers: { 'apikey': cfg.key, 'Authorization': 'Bearer ' + cfg.key } });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + (await res.text()).slice(0, 120));
+      this.sbRows = await res.json();
+      this.sbTable = t; this.render();
+      app.showToast('Loaded ' + this.sbRows.length + ' rows from ' + t, 'success');
+    } catch (e) { app.showToast('Failed to load ' + t + ': ' + e.message, 'error'); }
+  },
+
+  rowsGrid() {
+    if (!this.sbRows) return '';
+    if (!this.sbRows.length) return '<p style="color:#8f98a0;font-size:12px">Table is empty — hit <b>+ Row</b> to insert one with default values.</p>';
+    const cols = this.sbCols.length ? this.sbCols : Object.keys(this.sbRows[0]);
+    return '<div style="overflow-x:auto"><table class="sb-grid"><thead><tr>' +
+      cols.map(c => '<th>' + this.esc(c) + (c === this.sbPk ? ' 🔑' : '') + '</th>').join('') + '<th></th></tr></thead><tbody>' +
+      this.sbRows.map((r, ix) => '<tr>' + cols.map(c => {
+        const v = r[c];
+        const s = v === null || v === undefined ? 'NULL' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+        return '<td title="Click to edit" onclick="cloud.editCell(\'' + c + '\',' + ix + ')">' + this.esc(s).slice(0, 42) + '</td>';
+      }).join('') + '<td><button class="mini-btn" onclick="cloud.delRow(' + ix + ')">🗑</button></td></tr>').join('') +
+      '</tbody></table></div><p style="color:#64748b;font-size:10px;margin-top:6px">Click any cell to edit it. 🔑 = primary key.</p>';
+  },
+
+  coerce(v) {
+    if (v === 'true') return true;
+    if (v === 'false') return false;
+    if (v === 'null' || v === '') return null;
+    if (v !== '' && !isNaN(v) && !/^0/.test(v)) return Number(v);
+    return v;
+  },
+
+  async editCell(col, ix) {
+    const row = this.sbRows[ix];
+    const cur = row[col] === null || row[col] === undefined ? '' : (typeof row[col] === 'object' ? JSON.stringify(row[col]) : String(row[col]));
+    const val = await app.showPrompt('Edit ' + col, this.sbPk + '=' + row[this.sbPk] + ' — new value for "' + col + '" (true/false/number/null auto-detected):', cur);
+    if (val === null) return;
+    const cfg = app.supaConfig();
+    try {
+      const res = await fetch(cfg.url + '/rest/v1/' + this.sbTable + '?' + this.sbPk + '=eq.' + encodeURIComponent(row[this.sbPk]), {
+        method: 'PATCH',
+        headers: { 'apikey': cfg.key, 'Authorization': 'Bearer ' + cfg.key, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+        body: JSON.stringify({ [col]: this.coerce(val) })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + (await res.text()).slice(0, 120));
+      app.showToast('✓ ' + col + ' updated', 'success'); social.addXp(2);
+      this.openTable(this.sbTable);
+    } catch (e) { app.showToast('Update failed: ' + e.message, 'error'); }
+  },
+
+  async addRow() {
+    const cfg = app.supaConfig();
+    try {
+      const res = await fetch(cfg.url + '/rest/v1/' + this.sbTable, {
+        method: 'POST',
+        headers: { 'apikey': cfg.key, 'Authorization': 'Bearer ' + cfg.key, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + (await res.text()).slice(0, 120));
+      app.showToast('✓ Row added (default values)', 'success'); social.addXp(2);
+      this.openTable(this.sbTable);
+    } catch (e) { app.showToast('Insert failed: ' + e.message, 'error'); }
+  },
+
+  async delRow(ix) {
+    const row = this.sbRows[ix];
+    const cfg = app.supaConfig();
+    try {
+      const res = await fetch(cfg.url + '/rest/v1/' + this.sbTable + '?' + this.sbPk + '=eq.' + encodeURIComponent(row[this.sbPk]), {
+        method: 'DELETE', headers: { 'apikey': cfg.key, 'Authorization': 'Bearer ' + cfg.key }
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      app.showToast('🗑 Row deleted', 'success');
+      this.sbRows.splice(ix, 1); this.render();
+    } catch (e) { app.showToast('Delete failed: ' + e.message, 'error'); }
+  },
+
+  // ================= FIREBASE =================
+  renderFirebase() {
+    let html = '<div class="cfg-card"><h4>🔥 Firebase</h4>' +
+      '<p>Manage your database data inside CodeLab — the REST APIs work from any static site. Allow writes in your rules, or paste an ID token for authenticated access.</p>' +
+      '<div class="cloud-tabs" style="padding:4px 0 10px; background:transparent; border:none">' +
+      '<span class="cloud-tab ' + (this.ftab === 'rtdb' ? 'active' : '') + '" onclick="cloud.setFtab(\'rtdb\')">Realtime Database</span>' +
+      '<span class="cloud-tab ' + (this.ftab === 'firestore' ? 'active' : '') + '" onclick="cloud.setFtab(\'firestore\')">Firestore</span></div>' +
+      '<div class="integ-row"><button class="btn-c" onclick="cloud.embed(\'firebase\')">🖥️ Embed console</button>' +
+      '<button class="btn-c" onclick="window.open(\'https://console.firebase.google.com\',\'_blank\')">↗ Firebase Console</button></div></div>';
+    html += this.ftab === 'rtdb' ? this.rtdbUI() : this.fsUI();
+    return html;
+  },
+
+  // ---- Realtime Database ----
+  rtdbUI() {
+    const db = localStorage.getItem('codelab_firebase_db') || '';
+    const auth = localStorage.getItem('codelab_firebase_auth') || '';
+    let html = '<div class="cfg-card"><input id="fDb" placeholder="https://your-db-default-rtdb.firebaseio.com" value="' + db + '">' +
+      '<input id="fAuth" type="password" placeholder="Optional: ID token or database secret (?auth=)" value="' + auth + '">' +
+      '<div class="integ-row" style="margin-top:6px"><button class="btn-c" onclick="cloud.loadRtdb()">🔄 Browse data</button></div></div>';
+    if (this.rtdbData !== undefined) {
+      const segs = this.rtdbPath ? this.rtdbPath.split('/') : [];
+      html += '<div class="crumb"><span onclick="cloud.gotoRtdb(\'\')">root</span>' +
+        segs.map((s, i) => ' / <span onclick="cloud.crumbSeg(' + i + ')">' + this.esc(s) + '</span>').join('') + '</div>';
+      if (this.rtdbIsFolder) {
+        const keys = this.rtdbKeys || [];
+        html += '<div class="cfg-card">' + (keys.length ? keys.map((k, i) =>
+          '<div class="tree-row" onclick="cloud.rtdbChild(' + i + ')">📦 ' + this.esc(k) +
+          '<span class="tree-act"><button class="mini-btn" onclick="event.stopPropagation();cloud.delRtdbNode(' + i + ')">🗑</button></span></div>').join('')
+          : '<p style="color:#8f98a0;font-size:12px">Empty here — add a node below.</p>');
+        html += '<button class="mini-btn" style="margin-top:10px" onclick="cloud.addRtdbChild()">+ Add node here</button></div>';
+      } else {
+        const v = this.rtdbData;
+        html += '<div class="cfg-card"><p style="color:#93c5fd;font-size:12px">Value at <b>/' + this.esc(this.rtdbPath) + '</b>:</p>' +
+          '<textarea class="field-json" id="rtdbVal">' + this.esc(typeof v === 'object' ? JSON.stringify(v, null, 2) : (v === null ? 'null' : String(v))) + '</textarea>' +
+          '<div class="integ-row" style="margin-top:6px"><button class="btn-c" onclick="cloud.saveRtdbVal()">💾 Save value</button><button class="mini-btn" onclick="cloud.delRtdbNode(-1)">🗑 Delete this node</button></div></div>';
+      }
+    } else {
+      html += '<p style="color:#8f98a0;font-size:12px">Press <b>🔄 Browse data</b> to open your JSON tree.</p>';
+    }
+    return html;
+  },
+
+  loadRtdb() {
+    const db = document.getElementById('fDb').value.trim().replace(/\/+$/, '');
+    const t = document.getElementById('fAuth').value.trim();
+    if (db) localStorage.setItem('codelab_firebase_db', db); else localStorage.removeItem('codelab_firebase_db');
+    if (t) localStorage.setItem('codelab_firebase_auth', t); else localStorage.removeItem('codelab_firebase_auth');
+    this.rtdbData = undefined;
+    this.gotoRtdb('');
+  },
+
+  authQ() { const t = localStorage.getItem('codelab_firebase_auth'); return t ? '?auth=' + encodeURIComponent(t) : ''; },
+
+  async gotoRtdb(path) {
+    const db = (localStorage.getItem('codelab_firebase_db') || '').replace(/\/+$/, '');
+    if (!db) { app.showToast('Add your Firebase database URL first', 'error'); return; }
+    this.rtdbPath = path;
+    try {
+      let url = db + '/' + path + '.json' + this.authQ();
+      const res = await fetch(url + (url.indexOf('?') >= 0 ? '&' : '?') + 'shallow=true');
+      let data = await res.json();
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        this.rtdbIsFolder = true; this.rtdbKeys = Object.keys(data); this.rtdbData = data;
+      } else {
+        const res2 = await fetch(db + '/' + path + '.json' + this.authQ());
+        this.rtdbData = await res2.json(); this.rtdbIsFolder = false;
+      }
+      this.render();
+    } catch (e) { app.showToast('Firebase read failed: ' + e.message, 'error'); }
+  },
+
+  crumbSeg(i) { const segs = this.rtdbPath.split('/'); this.gotoRtdb(segs.slice(0, i + 1).join('/')); },
+
+  rtdbChild(i) { this.gotoRtdb((this.rtdbPath ? this.rtdbPath + '/' : '') + this.rtdbKeys[i]); },
+
+  async saveRtdbVal() {
+    const db = localStorage.getItem('codelab_firebase_db').replace(/\/+$/, '');
+    const raw = document.getElementById('rtdbVal').value;
+    let val; try { val = JSON.parse(raw); } catch (e) { val = raw; }
+    try {
+      const res = await fetch(db + '/' + this.rtdbPath + '.json' + this.authQ(), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(val)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      app.showToast('✓ Value saved', 'success'); social.addXp(2);
+      this.gotoRtdb(this.rtdbPath);
+    } catch (e) { app.showToast('Save failed: ' + e.message, 'error'); }
+  },
+
+  async delRtdbNode(i) {
+    const db = localStorage.getItem('codelab_firebase_db').replace(/\/+$/, '');
+    const p = i === -1 ? this.rtdbPath : (this.rtdbPath ? this.rtdbPath + '/' : '') + this.rtdbKeys[i];
+    try {
+      const res = await fetch(db + '/' + p + '.json' + this.authQ(), { method: 'DELETE' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      app.showToast('🗑 Node deleted', 'success');
+      this.gotoRtdb(this.rtdbPath.split('/').slice(0, -1).join('/'));
+    } catch (e) { app.showToast('Delete failed: ' + e.message, 'error'); }
+  },
+
+  async addRtdbChild() {
+    const db = localStorage.getItem('codelab_firebase_db').replace(/\/+$/, '');
+    const key = await app.showPrompt('New node', 'Key name for /' + this.rtdbPath + ':', 'newNode');
+    if (!key) return;
+    const raw = await app.showPrompt('Value for "' + key + '"', 'Any value — numbers, booleans, or JSON objects are auto-detected:', '');
+    if (raw === null) return;
+    let val; try { val = JSON.parse(raw); } catch (e) { val = raw; }
+    try {
+      const res = await fetch(db + '/' + (this.rtdbPath ? this.rtdbPath + '/' : '') + encodeURIComponent(key) + '.json' + this.authQ(), {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(val)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      app.showToast('✓ Node added', 'success'); social.addXp(2);
+      this.gotoRtdb(this.rtdbPath);
+    } catch (e) { app.showToast('Add failed: ' + e.message, 'error'); }
+  },
+
+  // ---- Firestore ----
+  fsUI() {
+    const pid = localStorage.getItem('codelab_firestore_pid') || '';
+    const key = localStorage.getItem('codelab_firestore_key') || '';
+    const tok = localStorage.getItem('codelab_firestore_token') || '';
+    let html = '<div class="cfg-card">' +
+      '<input id="fPid" placeholder="Project ID (e.g. my-app-12345)" value="' + pid + '">' +
+      '<input id="fKey" placeholder="Web API key (optional — for rule-based access)" value="' + key + '">' +
+      '<input id="fTok" type="password" placeholder="Optional: ID token for authenticated access" value="' + tok + '">' +
+      '<div class="integ-row" style="margin-top:6px"><button class="btn-c" onclick="cloud.saveFs()">💾 Save connection</button></div></div>' +
+      '<div class="cfg-card"><input id="fPath" placeholder="Collection or doc path — e.g. projects or users/abc123/posts" value="' + this.esc(this.fsPath) + '">' +
+      '<div class="integ-row" style="margin-top:6px"><button class="btn-c" onclick="cloud.loadFs()">🔄 Load</button><button class="mini-btn" onclick="cloud.addFsDoc()">+ Add doc</button></div>';
+    if (this.fsDocs) {
+      html += '<p style="color:#93c5fd;font-size:12px;margin:10px 0 6px">' + this.fsDocs.length + ' documents in /' + this.esc(this.fsPath) + '</p>' +
+        (this.fsDocs.length ? this.fsDocs.map((d, i) =>
+          '<div class="tree-row" onclick="cloud.editFsDoc(' + i + ')">📄 <b style="color:#fff">' + this.esc(d.name) + '</b>' +
+          '<span class="tree-act"><button class="mini-btn" onclick="event.stopPropagation();cloud.delFsDoc(' + i + ')">🗑</button></span></div>').join('')
+          : '<p style="color:#8f98a0;font-size:12px">No documents — add one!</p>');
+    }
+    if (this.fsDocEdit) {
+      html += '<div style="margin-top:12px"><div class="crumb"><span onclick="cloud.fsDocEdit=null;cloud.render()">← back</span> / <b>' + this.esc(this.fsDocEdit.name) + '</b></div>' +
+        '<p style="color:#8f98a0;font-size:11px;margin-bottom:6px">Edit fields as JSON — Firestore types (string, number, boolean, array, map) are handled automatically.</p>' +
+        '<textarea class="field-json" id="fsJson">' + this.esc(this.fsDocEdit.json) + '</textarea>' +
+        '<div class="integ-row" style="margin-top:6px"><button class="btn-c" onclick="cloud.saveFsDoc()">💾 Save document</button><button class="mini-btn" onclick="cloud.delFsDocCurrent()">🗑 Delete document</button></div></div>';
+    }
+    return html + '</div>';
+  },
+
+  saveFs() {
+    localStorage.setItem('codelab_firestore_pid', document.getElementById('fPid').value.trim());
+    localStorage.setItem('codelab_firestore_key', document.getElementById('fKey').value.trim());
+    localStorage.setItem('codelab_firestore_token', document.getElementById('fTok').value.trim());
+    app.showToast('💾 Firestore connection saved', 'success');
+  },
+
+  fsHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    const tok = localStorage.getItem('codelab_firestore_token');
+    if (tok) h['Authorization'] = 'Bearer ' + tok;
+    return h;
+  },
+
+  fsQs() {
+    const tok = localStorage.getItem('codelab_firestore_token');
+    const key = localStorage.getItem('codelab_firestore_key');
+    if (tok) return '';
+    return key ? '?key=' + encodeURIComponent(key) : '';
+  },
+
+  fsToTyped(v) {
+    if (v === null || v === undefined) return { nullValue: null };
+    if (typeof v === 'boolean') return { booleanValue: v };
+    if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+    if (typeof v === 'string') return { stringValue: v };
+    if (Array.isArray(v)) return { arrayValue: { values: v.map(x => this.fsToTyped(x)) } };
+    const o = {};
+    for (const k in v) o[k] = this.fsToTyped(v[k]);
+    return { mapValue: { fields: o } };
+  },
+
+  fsFromTyped(f) {
+    if (f === null || typeof f !== 'object') return f;
+    if ('stringValue' in f) return f.stringValue;
+    if ('integerValue' in f) return parseInt(f.integerValue, 10);
+    if ('doubleValue' in f) return f.doubleValue;
+    if ('booleanValue' in f) return f.booleanValue;
+    if ('nullValue' in f) return null;
+    if ('timestampValue' in f) return f.timestampValue;
+    if ('arrayValue' in f) return (f.arrayValue.values || []).map(x => this.fsFromTyped(x));
+    if ('mapValue' in f) { const o = {}; const fl = f.mapValue.fields || {}; for (const k in fl) o[k] = this.fsFromTyped(fl[k]); return o; }
+    return f;
+  },
+
+  async loadFs() {
+    this.saveFs();
+    const pathEl = document.getElementById('fPath');
+    if (pathEl) this.fsPath = pathEl.value.trim().replace(/^\/+|\/+$/g, '');
+    const pid = localStorage.getItem('codelab_firestore_pid');
+    if (!pid) { app.showToast('Enter your Firebase project ID', 'error'); return; }
+    try {
+      const res = await fetch('https://firestore.googleapis.com/v1/projects/' + pid + '/databases/(default)/documents' + (this.fsPath ? '/' + this.fsPath : '') + this.fsQs(), { headers: this.fsHeaders() });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      if (data.fields && data.name) {
+        this.fsDocEdit = { name: data.name.split('/documents/')[1], json: JSON.stringify(this.fsFromTyped(data.fields), null, 2) };
+        this.fsDocs = null;
+      } else {
+        this.fsDocs = (data.documents || []).map(d => ({ name: d.name.split('/documents/')[1], fields: this.fsFromTyped(d.fields || {}) }));
+        this.fsDocEdit = null;
+      }
+      this.render();
+      app.showToast('✓ ' + (this.fsDocs ? this.fsDocs.length + ' documents loaded' : 'Document loaded'), 'success');
+    } catch (e) { app.showToast('Firestore load failed: ' + e.message, 'error'); }
+  },
+
+  editFsDoc(i) {
+    const d = this.fsDocs[i];
+    this.fsDocEdit = { name: d.name, json: JSON.stringify(d.fields, null, 2) };
+    this.render();
+  },
+
+  async saveFsDoc() {
+    const pid = localStorage.getItem('codelab_firestore_pid');
+    let parsed;
+    try { parsed = JSON.parse(document.getElementById('fsJson').value); } catch (e) { app.showToast('Invalid JSON: ' + e.message, 'error'); return; }
+    try {
+      const res = await fetch('https://firestore.googleapis.com/v1/projects/' + pid + '/databases/(default)/documents/' + this.fsDocEdit.name + this.fsQs(), {
+        method: 'PATCH', headers: this.fsHeaders(), body: JSON.stringify({ fields: this.fsToTyped(parsed || {}) })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      app.showToast('✓ Document saved', 'success'); social.addXp(2);
+      this.fsDocEdit = null; this.loadFs();
+    } catch (e) { app.showToast('Save failed: ' + e.message, 'error'); }
+  },
+
+  async delFsDoc(i) {
+    const pid = localStorage.getItem('codelab_firestore_pid');
+    try {
+      const res = await fetch('https://firestore.googleapis.com/v1/projects/' + pid + '/databases/(default)/documents/' + this.fsDocs[i].name + this.fsQs(), { method: 'DELETE', headers: this.fsHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      app.showToast('🗑 Document deleted', 'success');
+      this.loadFs();
+    } catch (e) { app.showToast('Delete failed: ' + e.message, 'error'); }
+  },
+
+  async delFsDocCurrent() {
+    if (!this.fsDocEdit) return;
+    const pid = localStorage.getItem('codelab_firestore_pid');
+    try {
+      const res = await fetch('https://firestore.googleapis.com/v1/projects/' + pid + '/databases/(default)/documents/' + this.fsDocEdit.name + this.fsQs(), { method: 'DELETE', headers: this.fsHeaders() });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      app.showToast('🗑 Document deleted', 'success');
+      this.fsDocEdit = null; this.loadFs();
+    } catch (e) { app.showToast('Delete failed: ' + e.message, 'error'); }
+  },
+
+  async addFsDoc() {
+    const pid = localStorage.getItem('codelab_firestore_pid');
+    if (!pid || !this.fsPath) { app.showToast('Load a collection first (type its path above)', 'error'); return; }
+    try {
+      const res = await fetch('https://firestore.googleapis.com/v1/projects/' + pid + '/databases/(default)/documents/' + this.fsPath + this.fsQs(), {
+        method: 'POST', headers: this.fsHeaders(), body: JSON.stringify({ fields: {} })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      app.showToast('✓ Document created', 'success'); social.addXp(2);
+      this.loadFs();
+    } catch (e) { app.showToast('Create failed: ' + e.message, 'error'); }
+  }
+};
+
+window.addEventListener('DOMContentLoaded', () => app.init());
+</script>
+</body>
+</html>
